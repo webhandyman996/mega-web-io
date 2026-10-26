@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mega 網頁控制台</title>
+<style>
+:root{
+  --bg:#f4f1ea; --panel:#fffdf8; --ink:#14213d; --muted:#5b6475; --line:#d8d2c4;
+  --navy:#14213d; --gold:#c9a227; --red:#c0392b;
+  --pcb:#00838f; --pcb-dark:#006064; --silk:#e8f6f7; --hdr:#1d1d1d;
+  --high:#ff5a36; --low:#3a4a52; --in:#3fa7ff; --pwm:#ffb300;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0d1321; --panel:#151d2e; --ink:#e8ecf3; --muted:#9aa5b8; --line:#2a3550;
+  --navy:#0a1020; --pcb:#00727c; --pcb-dark:#00525a;
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;line-height:1.6}
+header{background:var(--navy);color:#fff;border-bottom:3px solid var(--gold);padding:12px 16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+header h1{font-size:1.15rem;margin:0;letter-spacing:.06em}
+header .sub{font-size:.8rem;color:#b9c2d6}
+.bar{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 14px;cursor:pointer;border-radius:2px}
+button:hover{border-color:var(--gold)}
+button.primary{background:var(--gold);border-color:var(--gold);color:#14213d;font-weight:700}
+header button{background:transparent;color:#fff;border-color:#4a5675}
+header button.primary{background:var(--gold);color:#14213d}
+#status{font-family:Consolas,monospace;font-size:.85rem}
+#status.on{color:#7ee08a} #status.off{color:#ff9b8a}
+main{max-width:1200px;margin:0 auto;padding:16px;display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px}
+main>*,main section{min-width:0}
+@media (max-width:900px){main{grid-template-columns:1fr}}
+section{background:var(--panel);border:1px solid var(--line);padding:12px}
+h2{font-size:.95rem;margin:0 0 8px;padding-bottom:6px;border-bottom:1px solid var(--line);letter-spacing:.05em}
+.boardwrap{overflow-x:auto}
+svg#board{width:100%;min-width:640px;height:auto;display:block}
+.pin{cursor:pointer}
+.pin rect.hole{fill:var(--hdr);stroke:#000;stroke-width:.6}
+.pin circle.led{fill:var(--low);transition:fill .12s}
+.pin.out-high circle.led{fill:var(--high)}
+.pin.pwm-on circle.led{fill:var(--pwm)}
+.pin.in-high circle.led{fill:var(--in)}
+.pin.in-low circle.led{fill:#0b3b66}
+.pin.analog circle.led{fill:#6b7f8a}
+.pin.locked{cursor:not-allowed;opacity:.45}
+.pin.sel rect.hole{stroke:var(--gold);stroke-width:2.4}
+.pin:hover rect.hole{stroke:var(--gold);stroke-width:1.6}
+.lbl{font-family:Consolas,monospace;font-size:12px;fill:var(--silk);pointer-events:none}
+.lbl.big{font-size:18px;font-weight:700;letter-spacing:.08em}
+.lbl.live{fill:#ffe082;font-weight:700}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.8rem;color:var(--muted);margin-top:8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+#panel .name{font-family:Consolas,monospace;font-size:1.6rem;font-weight:700}
+#panel .hint{color:var(--muted);font-size:.85rem}
+.modes{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.modes button.act{background:var(--navy);color:#fff;border-color:var(--navy)}
+.big-val{font-family:Consolas,monospace;font-size:2.4rem;font-weight:700}
+input[type=range]{width:100%}
+pre{background:var(--navy);color:#e9e3c9;font-family:Consolas,monospace;font-size:.82rem;padding:10px;margin:0;max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+#log{background:#0b0f19;color:#9fe0a8}
+.row{display:flex;gap:8px;align-items:center;margin-top:8px}
+.row input[type=text]{flex:1;font:inherit;font-family:Consolas,monospace;padding:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+.side{display:grid;gap:16px;align-content:start}
+.note{font-size:.8rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>MEGA 2560 網頁控制台</h1>
+    <div class="sub">點板子上的腳位，直接控制你的 Arduino</div>
+  </div>
+  <div class="bar">
+    <span id="status" class="off">● 未連線</span>
+    <button id="btnConnect" class="primary">連接 Mega</button>
+    <button id="btnDemo">沒有板子，先試看看</button>
+    <button id="btnReset" disabled>全部重設</button>
+  </div>
+</header>
+
+<main>
+  <div style="display:grid;gap:16px">
+    <section>
+      <h2>板子</h2>
+      <div class="boardwrap"><svg id="board" viewBox="0 0 1040 560" aria-label="Arduino Mega 2560"></svg></div>
+      <div class="legend">
+        <span><i style="background:var(--high)"></i>輸出 HIGH</span>
+        <span><i style="background:var(--low)"></i>輸出 LOW／未使用</span>
+        <span><i style="background:var(--pwm)"></i>PWM</span>
+        <span><i style="background:var(--in)"></i>輸入 HIGH</span>
+        <span><i style="background:#0b3b66"></i>輸入 LOW</span>
+        <span>~ 可 PWM　灰色 0、1 是 USB 通訊用</span>
+      </div>
+    </section>
+    <section>
+      <h2>對應的 Arduino 程式</h2>
+      <pre id="code">// 點腳位後，這裡會出現同樣效果的程式碼</pre>
+      <div class="row"><button id="btnClearCode">清除</button><button id="btnCopyCode">複製</button></div>
+    </section>
+  </div>
+
+  <div class="side">
+    <section id="panel">
+      <h2>腳位</h2>
+      <div class="name" id="pName">—</div>
+      <div class="hint" id="pHint">點板子上的腳位開始</div>
+      <div class="modes" id="pModes"></div>
+      <div id="pBody"></div>
+    </section>
+    <section>
+      <h2>通訊紀錄</h2>
+      <pre id="log"></pre>
+      <div class="row"><input type="text" id="cmd" placeholder="自己打指令，例如 D13=1"><button id="btnSend">送出</button></div>
+      <p class="note">需要 Chrome 或 Edge。Arduino IDE 的序列埠監控視窗要先關掉。</p>
+    </section>
+  </div>
+</main>
+
+<script>
+// ---------- 腳位資料 ----------
+const PWM = new Set([2,3,4,5,6,7,8,9,10,11,12,13,44,45,46]);
+const pins = {};          // key: "D9" / "A0" → {key, num, analog, mode, value, el}
+let selected = null;
+
+// ---------- 畫板子 ----------
+const NS = 'http://www.w3.org/2000/svg';
+const svg = document.getElementById('board');
+const P = 25.4;           // 一格 2.54mm，畫面上 25.4 單位（10 單位/mm）
+
+function el(tag, attrs, parent = svg) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  parent.appendChild(e);
+  return e;
+}
+function text(x, y, s, cls = 'lbl', anchor = 'middle', parent = svg) {
+  const t = el('text', {x, y, class: cls, 'text-anchor': anchor}, parent);
+  t.textContent = s;
+  return t;
+}
+
+function drawBoard() {
+  // 板子外形（101.6 x 53.3 mm）
+  el('rect', {x: 10, y: 10, width: 1016, height: 533, rx: 14, fill: 'var(--pcb)', stroke: 'var(--pcb-dark)', 'stroke-width': 3});
+  // USB 與電源座
+  el('rect', {x: 0, y: 90, width: 160, height: 120, fill: '#b0b7bf', stroke: '#7d858e', 'stroke-width': 2});
+  text(80, 156, 'USB', 'lbl big');
+  el('rect', {x: 0, y: 400, width: 140, height: 90, fill: '#222', stroke: '#000'});
+  text(70, 450, 'DC 7-12V', 'lbl');
+  // 主晶片
+  el('rect', {x: 470, y: 210, width: 150, height: 150, fill: '#1b1b1b', stroke: '#000', transform: 'rotate(45 545 285)'});
+  text(545, 290, 'ATmega2560', 'lbl');
+  text(300, 300, 'ARDUINO', 'lbl big');
+  text(300, 318, 'MEGA 2560', 'lbl big');
+  // 13 號腳旁的板載 LED「L」
+  el('rect', {x: 250, y: 120, width: 20, height: 12, fill: '#f6f6f6'});
+  window.boardLed = el('circle', {cx: 260, cy: 145, r: 6, fill: '#5a4a1a'});
+  text(282, 148, 'L', 'lbl', 'start');
+  el('circle', {cx: 225, cy: 145, r: 6, fill: '#3bd16f'});
+  text(207, 148, 'ON', 'lbl', 'end');
+
+  // 上排：Uno 相容的 10 腳 + 8 腳 + Mega 的 8 腳通訊排
+  const top = 30;
+  const topA = ['SCL', 'SDA', 'AREF', 'GND', 13, 12, 11, 10, 9, 8];
+  topA.forEach((n, i) => addPin(172 + i * P, top, n, 'below'));
+  [7, 6, 5, 4, 3, 2, 1, 0].forEach((n, i) => addPin(445 + i * P, top, n, 'below'));
+  [14, 15, 16, 17, 18, 19, 20, 21].forEach((n, i) => addPin(660 + i * P, top, n, 'below'));
+  text(560, 100, 'DIGITAL (PWM ~)', 'lbl');
+  text(750, 100, 'COMMUNICATION', 'lbl');
+
+  // 右側雙排 22~53
+  addPin(940, 80, '5V', 'left', true); addPin(940 + P, 80, '5V', 'right', true);
+  for (let r = 0; r < 16; r++) {
+    const y = 80 + (r + 1) * P;
+    addPin(940, y, 22 + r * 2, 'left');
+    addPin(940 + P, y, 23 + r * 2, 'right');
+  }
+  addPin(940, 80 + 17 * P, 'GND', 'left', true); addPin(940 + P, 80 + 17 * P, 'GND', 'right', true);
+
+  // 下排：電源 8 腳 + A0~A7 + A8~A15
+  const bot = 515;
+  ['NC', 'IOREF', 'RESET', '3.3V', '5V', 'GND', 'GND', 'VIN'].forEach((n, i) => addPin(270 + i * P, bot, n, 'above', true));
+  for (let i = 0; i < 8; i++) addPin(500 + i * P, bot, 'A' + i, 'above');
+  for (let i = 0; i < 8; i++) addPin(720 + i * P, bot, 'A' + (8 + i), 'above');
+  text(360, 425, 'POWER', 'lbl');
+  text(720, 410, 'ANALOG IN', 'lbl');
+}
+
+function addPin(x, y, name, labelPos, power = false) {
+  const g = el('g', {class: 'pin'});
+  el('rect', {x: x - 10, y: y - 10, width: 20, height: 20, class: 'hole'}, g);
+  el('circle', {cx: x, cy: y, r: 5.5, class: 'led'}, g);
+  const isNum = typeof name === 'number';
+  const isAnalog = typeof name === 'string' && /^A\d+$/.test(name);
+  let label = isNum && PWM.has(name) ? '~' + name : String(name);
+  let lbl;
+  if (labelPos === 'left' || labelPos === 'right') {
+    lbl = text(labelPos === 'left' ? x - 16 : x + 16, y + 4, label, 'lbl', labelPos === 'left' ? 'end' : 'start', g);
+  } else {
+    // 上下排的字跟真的板子一樣直著寫
+    const ly = labelPos === 'below' ? y + 16 : y - 16;
+    lbl = text(x + 4, ly, label, 'lbl', labelPos === 'below' ? 'end' : 'start', g);
+    lbl.setAttribute('transform', `rotate(-90 ${x + 4} ${ly})`);
+  }
+
+  if (!isNum && !isAnalog) {           // 電源、通訊等不能控制的腳
+    g.classList.add('locked');
+    g.style.opacity = power ? .6 : .6;
+    return;
+  }
+  const key = isAnalog ? name : 'D' + name;
+  const p = {key, num: isAnalog ? +name.slice(1) : name, analog: isAnalog, mode: isAnalog ? 'analog' : 'none', value: 0, el: g};
+  if (isAnalog) {
+    g.classList.add('analog');
+    p.valText = lbl;      // 類比值直接寫在標籤後面，例如「A0 512」
+  }
+  if (isNum && name <= 1) {
+    g.classList.add('locked');
+    g.querySelector('text').textContent = name === 0 ? 'RX0' : 'TX0';
+    return;
+  }
+  pins[key] = p;
+  g.addEventListener('click', () => onPinClick(p));
+  const t = el('title', {}, g);
+  t.textContent = isAnalog ? name + '（類比輸入）' : name + ' 號腳' + (PWM.has(name) ? '（可 PWM）' : '');
+}
+
+// ---------- 畫面更新 ----------
+function paint(p) {
+  const c = p.el.classList;
+  c.remove('out-high', 'pwm-on', 'in-high', 'in-low');
+  if (p.mode === 'out' && p.value) c.add('out-high');
+  if (p.mode === 'pwm' && p.value > 0) c.add('pwm-on');
+  if (p.mode === 'in') c.add(p.value ? 'in-high' : 'in-low');
+  if (p.mode === 'pwm') p.el.querySelector('circle.led').style.opacity = 0.3 + 0.7 * p.value / 255;
+  else p.el.querySelector('circle.led').style.opacity = '';
+  if (p.key === 'D13') {
+    const on = (p.mode === 'out' && p.value) || (p.mode === 'pwm' && p.value > 0);
+    boardLed.setAttribute('fill', on ? '#ffd23f' : '#5a4a1a');
+  }
+  if (p === selected) renderPanel();
+}
+
+function select(p) {
+  if (selected) selected.el.classList.remove('sel');
+  selected = p;
+  p.el.classList.add('sel');
+  renderPanel();
+}
+
+function onPinClick(p) {
+  select(p);
+  if (p.analog) return;
+  // 還沒用過的腳：點一下就當輸出、變 HIGH；已經是輸出：點一下切換
+  if (p.mode === 'none') setOut(p, 1);
+  else if (p.mode === 'out') setOut(p, p.value ? 0 : 1);
+}
+
+function renderPanel() {
+  const p = selected;
+  const name = document.getElementById('pName');
+  const hint = document.getElementById('pHint');
+  const modes = document.getElementById('pModes');
+  const body = document.getElementById('pBody');
+  modes.innerHTML = ''; body.innerHTML = '';
+  if (p.analog) {
+    name.textContent = p.key;
+    hint.textContent = '類比輸入，讀到 0～1023（0V～5V）';
+    body.innerHTML = `<div class="big-val">${autoOn ? p.value : '--'}</div>
+      <div class="hint">${(p.value * 5 / 1023).toFixed(2)} V</div>`;
+    if (!autoOn) {
+      const b = document.createElement('button');
+      b.textContent = '開始讀取類比值';
+      b.className = 'primary';
+      b.onclick = () => setAuto(true);
+      body.appendChild(b);
+    }
+    return;
+  }
+  name.textContent = (PWM.has(p.num) ? '~' : '') + p.num + ' 號腳';
+  hint.textContent = PWM.has(p.num) ? '數位腳，可以 PWM' : '數位腳';
+  const list = [['out', '輸出'], ['in', '輸入']];
+  if (PWM.has(p.num)) list.splice(1, 0, ['pwm', 'PWM']);
+  for (const [m, label] of list) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    if (p.mode === m) b.className = 'act';
+    b.onclick = () => {
+      if (m === 'out') setOut(p, p.mode === 'out' ? p.value : 0);
+      if (m === 'pwm') setPwm(p, p.mode === 'pwm' ? p.value : 128);
+      if (m === 'in') setIn(p);
+    };
+    modes.appendChild(b);
+  }
+  if (p.mode === 'out') {
+    body.innerHTML = `<div class="big-val">${p.value ? 'HIGH' : 'LOW'}</div>`;
+    const b = document.createElement('button');
+    b.textContent = p.value ? '改成 LOW' : '改成 HIGH';
+    b.className = 'primary';
+    b.onclick = () => setOut(p, p.value ? 0 : 1);
+    body.appendChild(b);
+  } else if (p.mode === 'pwm') {
+    body.innerHTML = `<div class="big-val" id="pwmVal">${p.value}</div>
+      <input type="range" min="0" max="255" value="${p.value}" id="pwmRange">
+      <div class="hint">約 ${(p.value / 255 * 100).toFixed(0)}% 的時間是 HIGH</div>`;
+    const r = document.getElementById('pwmRange');
+    r.oninput = () => document.getElementById('pwmVal').textContent = r.value;
+    r.onchange = () => setPwm(p, +r.value);
+  } else if (p.mode === 'in') {
+    body.innerHTML = `<div class="big-val">${p.value ? 'HIGH' : 'LOW'}</div>
+      <div class="hint">已開內建上拉：沒接東西是 HIGH，接到 GND（按鈕按下）是 LOW</div>`;
+  } else {
+    body.innerHTML = '<div class="hint">選一種用法</div>';
+  }
+}
+
+// ---------- 動作 → 送指令 + 程式碼 ----------
+const declared = {};      // 程式碼裡已經 pinMode 過的腳
+function code(lines) {
+  const pre = document.getElementById('code');
+  if (pre.dataset.empty !== 'no') { pre.textContent = ''; pre.dataset.empty = 'no'; }
+  pre.textContent += lines.join('\n') + '\n';
+  pre.scrollTop = pre.scrollHeight;
+}
+function needMode(p, mode) {
+  if (declared[p.num] === mode) return [];
+  declared[p.num] = mode;
+  return [`pinMode(${p.num}, ${mode});`];
+}
+
+function setOut(p, v) {
+  if (!send(`D${p.num}=${v}`)) return;
+  p.mode = 'out'; p.value = v;
+  code([...needMode(p, 'OUTPUT'), `digitalWrite(${p.num}, ${v ? 'HIGH' : 'LOW'});`]);
+  paint(p);
+}
+function setPwm(p, v) {
+  if (!send(`P${p.num}=${v}`)) return;
+  p.mode = 'pwm'; p.value = v;
+  code([...needMode(p, 'OUTPUT'), `analogWrite(${p.num}, ${v});`]);
+  paint(p);
+}
+function setIn(p) {
+  if (!send(`I${p.num}`)) return;
+  p.mode = 'in';
+  code([...needMode(p, 'INPUT_PULLUP'), `int s${p.num} = digitalRead(${p.num});`]);
+  paint(p);
+}
+let autoOn = false;
+function setAuto(on) {
+  if (!send(`AUTO=${on ? 1 : 0}`)) return;
+  autoOn = on;
+  if (on) code(['int v = analogRead(A0);   // A0~A15 都一樣']);
+  if (selected) renderPanel();
+}
+
+// ---------- 收到 Mega 的回報 ----------
+function onLine(s) {
+  if (!s.startsWith('A:')) log('← ' + s);   // 類比值每 0.2 秒一次，不記，免得洗版
+  let m;
+  if ((m = /^D(\d+):([01])$/.exec(s))) {
+    const p = pins['D' + m[1]];
+    if (p) { p.mode = 'in'; p.value = +m[2]; paint(p); }
+  } else if (s.startsWith('A:')) {
+    s.slice(2).split(',').forEach((v, i) => {
+      const p = pins['A' + i];
+      if (!p) return;
+      p.value = +v;
+      p.valText.textContent = p.key + ' ' + v;
+      p.valText.classList.add('live');
+      if (p === selected) renderPanel();
+    });
+  } else if ((m = /^OK ([DP])(\d+)=(\d+)$/.exec(s))) {
+    // 自己打的指令也讓板子圖跟著變
+    const p = pins['D' + m[2]];
+    if (p) { p.mode = m[1] === 'D' ? 'out' : 'pwm'; p.value = +m[3]; paint(p); }
+  } else if (s.startsWith('READY')) {
+    setStatus(true, '● 已連線');
+  }
+}
+
+// ---------- 序列埠 ----------
+let port = null, writer = null, demo = null;
+const enc = new TextEncoder();
+
+function send(cmd) {
+  if (!writer && !demo) { log('（還沒連接 Mega）'); flash(); return false; }
+  log('→ ' + cmd);
+  if (demo) demo(cmd); else writer.write(enc.encode(cmd + '\n'));
+  return true;
+}
+
+async function connect() {
+  if (!('serial' in navigator)) {
+    alert('這個瀏覽器不支援 Web Serial，請用 Chrome 或 Edge 開啟。');
+    return;
+  }
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({baudRate: 115200});
+  } catch (e) { log('連接取消：' + e.message); return; }
+  writer = port.writable.getWriter();
+  demo = null;
+  setStatus(true, '● 連線中，等 Mega 重新開機…');
+  document.getElementById('btnReset').disabled = false;
+  readLoop();
+  port.addEventListener('disconnect', () => { writer = null; port = null; setStatus(false, '● 已中斷'); });
+}
+
+async function readLoop() {
+  const dec = new TextDecoder();
+  let buf = '';
+  try {
+    const reader = port.readable.getReader();
+    while (true) {
+      const {value, done} = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, {stream: true});
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const s = buf.slice(0, i).trim();
+        buf = buf.slice(i + 1);
+        if (s) onLine(s);
+      }
+    }
+  } catch (e) { log('讀取中斷：' + e.message); }
+}
+
+// 沒有板子時的模擬：照 Mega 程式的方式回話
+function startDemo() {
+  demo = (cmd) => {
+    setTimeout(() => {
+      let m;
+      if ((m = /^I(\d+)$/.exec(cmd))) { onLine('OK ' + cmd); onLine(`D${m[1]}:1`); }
+      else if (cmd === 'AUTO=1') { onLine('OK ' + cmd); demoTimer = setInterval(() => onLine('A:' + Array.from({length: 16}, (_, i) => Math.round(400 + 300 * Math.sin(Date.now() / 1500 + i))).join(',')), 300); }
+      else if (cmd === 'AUTO=0') { onLine('OK ' + cmd); clearInterval(demoTimer); }
+      else onLine('OK ' + cmd);
+    }, 60);
+  };
+  setStatus(true, '● 模擬模式（沒接板子）');
+  document.getElementById('btnReset').disabled = false;
+  onLine('READY MEGA-IO v1（模擬）');
+  setStatus(true, '● 模擬模式（沒接板子）');
+}
+let demoTimer = null;
+
+function resetAll() {
+  if (!send('RESET')) return;
+  for (const k in pins) {
+    const p = pins[k];
+    if (!p.analog) { p.mode = 'none'; p.value = 0; paint(p); }
+    else { p.valText.textContent = p.key; p.valText.classList.remove('live'); p.value = 0; }
+  }
+  autoOn = false; clearInterval(demoTimer);
+  for (const k in declared) delete declared[k];
+  if (selected) renderPanel();
+}
+
+// ---------- 小工具 ----------
+function log(s) {
+  const pre = document.getElementById('log');
+  pre.textContent += s + '\n';
+  const lines = pre.textContent.split('\n');
+  if (lines.length > 200) pre.textContent = lines.slice(-200).join('\n');
+  pre.scrollTop = pre.scrollHeight;
+}
+function setStatus(on, s) {
+  const st = document.getElementById('status');
+  st.textContent = s; st.className = on ? 'on' : 'off';
+}
+function flash() {
+  const b = document.getElementById('btnConnect');
+  b.animate([{transform: 'scale(1)'}, {transform: 'scale(1.12)'}, {transform: 'scale(1)'}], {duration: 400});
+}
+
+document.getElementById('btnConnect').onclick = connect;
+document.getElementById('btnDemo').onclick = startDemo;
+document.getElementById('btnReset').onclick = resetAll;
+document.getElementById('btnSend').onclick = () => {
+  const i = document.getElementById('cmd');
+  if (i.value.trim()) send(i.value.trim().toUpperCase());
+  i.value = '';
+};
+document.getElementById('cmd').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('btnSend').click(); });
+document.getElementById('btnClearCode').onclick = () => {
+  const pre = document.getElementById('code');
+  pre.textContent = '// 點腳位後，這裡會出現同樣效果的程式碼'; pre.dataset.empty = '';
+  for (const k in declared) delete declared[k];
+};
+document.getElementById('btnCopyCode').onclick = () => navigator.clipboard.writeText(document.getElementById('code').textContent);
+
+drawBoard();
+</script>
+</body>
+</html>
