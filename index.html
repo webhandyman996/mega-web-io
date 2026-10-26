@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mega 網頁控制台</title>
+<title>開發板網頁控制台</title>
 <style>
 :root{
   --bg:#f4f1ea; --panel:#fffdf8; --ink:#14213d; --muted:#5b6475; --line:#d8d2c4;
@@ -20,6 +20,9 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans TC","
 header{background:var(--navy);color:#fff;border-bottom:3px solid var(--gold);padding:12px 16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center}
 header h1{font-size:1.15rem;margin:0;letter-spacing:.06em}
 header .sub{font-size:.8rem;color:#b9c2d6}
+.tabs{display:flex;gap:0;border:1px solid #4a5675}
+.tabs a{color:#b9c2d6;text-decoration:none;padding:4px 14px;font-size:.9rem}
+.tabs a.act{background:var(--gold);color:#14213d;font-weight:700}
 .bar{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 14px;cursor:pointer;border-radius:2px}
 button:hover{border-color:var(--gold)}
@@ -42,7 +45,7 @@ svg#board{width:100%;min-width:640px;height:auto;display:block}
 .pin.pwm-on circle.led{fill:var(--pwm)}
 .pin.in-high circle.led{fill:var(--in)}
 .pin.in-low circle.led{fill:#0b3b66}
-.pin.analog circle.led{fill:#6b7f8a}
+.pin.analog circle.led,.pin.adc circle.led{fill:#6b7f8a}
 .pin.locked{cursor:not-allowed;opacity:.45}
 .pin.sel rect.hole{stroke:var(--gold);stroke-width:2.4}
 .pin:hover rect.hole{stroke:var(--gold);stroke-width:1.6}
@@ -68,12 +71,13 @@ pre{background:var(--navy);color:#e9e3c9;font-family:Consolas,monospace;font-siz
 <body>
 <header>
   <div>
-    <h1>MEGA 2560 網頁控制台</h1>
-    <div class="sub">點板子上的腳位，直接控制你的 Arduino</div>
+    <h1 id="title">網頁控制台</h1>
+    <div class="sub">點板子上的腳位，直接控制你的開發板</div>
   </div>
+  <nav class="tabs"><a href="?board=mega" id="tabMega">Mega 2560</a><a href="?board=esp32" id="tabEsp32">ESP32</a></nav>
   <div class="bar">
     <span id="status" class="off">● 未連線</span>
-    <button id="btnConnect" class="primary">連接 Mega</button>
+    <button id="btnConnect" class="primary">連接板子</button>
     <button id="btnDemo">沒有板子，先試看看</button>
     <button id="btnReset" disabled>全部重設</button>
   </div>
@@ -83,14 +87,14 @@ pre{background:var(--navy);color:#e9e3c9;font-family:Consolas,monospace;font-siz
   <div style="display:grid;gap:16px">
     <section>
       <h2>板子</h2>
-      <div class="boardwrap"><svg id="board" viewBox="0 0 1040 560" aria-label="Arduino Mega 2560"></svg></div>
+      <div class="boardwrap"><svg id="board"></svg></div>
       <div class="legend">
         <span><i style="background:var(--high)"></i>輸出 HIGH</span>
         <span><i style="background:var(--low)"></i>輸出 LOW／未使用</span>
         <span><i style="background:var(--pwm)"></i>PWM</span>
         <span><i style="background:var(--in)"></i>輸入 HIGH</span>
         <span><i style="background:#0b3b66"></i>輸入 LOW</span>
-        <span>~ 可 PWM　灰色 0、1 是 USB 通訊用</span>
+        <span id="legendNote"></span>
       </div>
     </section>
     <section>
@@ -112,21 +116,55 @@ pre{background:var(--navy);color:#e9e3c9;font-family:Consolas,monospace;font-siz
       <h2>通訊紀錄</h2>
       <pre id="log"></pre>
       <div class="row"><input type="text" id="cmd" placeholder="自己打指令，例如 D13=1"><button id="btnSend">送出</button></div>
-      <p class="note">需要 Chrome 或 Edge。Arduino IDE 的序列埠監控視窗要先關掉。</p>
+      <p class="note" id="sideNote"></p>
     </section>
   </div>
 </main>
 
 <script>
-// ---------- 腳位資料 ----------
-const PWM = new Set([2,3,4,5,6,7,8,9,10,11,12,13,44,45,46]);
-const pins = {};          // key: "D9" / "A0" → {key, num, analog, mode, value, el}
+// ---------- 兩種板子的差別都寫在這裡 ----------
+const BOARDS = {
+  mega: {
+    name: 'Mega 2560', fw: 'MEGA-IO', sketch: 'mega_io/mega_io.ino',
+    viewBox: '0 0 1040 560', pitch: 25.4,
+    pwm: new Set([2,3,4,5,6,7,8,9,10,11,12,13,44,45,46]), markPwm: true,
+    locked: {0: 'RX0', 1: 'TX0'},
+    analogOnly: new Set(),          // Mega 的類比腳另外叫 A0~A15
+    adcCapable: new Set(),
+    analogOrder: Array.from({length: 16}, (_, i) => 'A' + i),
+    adcMax: 1023, vref: 5,
+    ledPin: 13, ledOn: '#ffd23f', ledOff: '#5a4a1a',
+    analogName: p => p.key,
+    note: '~ 可 PWM　灰色 0、1 是 USB 通訊用',
+    sideNote: '需要 Chrome 或 Edge。Arduino IDE 的序列埠監控視窗要先關掉。',
+    draw: drawMega,
+  },
+  esp32: {
+    name: 'ESP32', fw: 'ESP32-IO', sketch: 'esp32_io/esp32_io.ino',
+    viewBox: '0 0 1080 470', pitch: 50,
+    pwm: new Set([2,4,5,12,13,14,15,16,17,18,19,21,22,23,25,26,27,32,33]), markPwm: false,
+    locked: {0: 'IO0', 1: 'TX0', 3: 'RX0'},
+    analogOnly: new Set([34, 35, 36, 39]),   // 只能輸入的腳，當類比用
+    adcCapable: new Set([32, 33]),           // 數位腳，也能切成類比
+    analogOrder: ['D36', 'D39', 'D34', 'D35', 'D32', 'D33'],
+    adcMax: 4095, vref: 3.3,
+    ledPin: 2, ledOn: '#4aa3ff', ledOff: '#1a2a4a',
+    analogName: p => String(p.num),
+    labels: {36: 'VP 36', 39: 'VN 39', 16: 'RX2 16', 17: 'TX2 17'},
+    note: '輸出腳都能 PWM　34、35、VP、VN 只能輸入（類比）　灰色：TX0、RX0 是 USB 通訊用，IO0 是開機按鈕，SD0~SD3、CMD、CLK 接記憶體',
+    sideNote: '需要 Chrome 或 Edge。ESP32 腳位是 3.3V，不要接 5V。',
+    draw: drawEsp32,
+  },
+};
+const boardId = new URLSearchParams(location.search).get('board') === 'esp32' ? 'esp32' : 'mega';
+const B = BOARDS[boardId];
+
+const pins = {};          // key: "D9" / "A0" → {key, num, analog, mode, value, el, valText}
 let selected = null;
 
 // ---------- 畫板子 ----------
 const NS = 'http://www.w3.org/2000/svg';
 const svg = document.getElementById('board');
-const P = 25.4;           // 一格 2.54mm，畫面上 25.4 單位（10 單位/mm）
 
 function el(tag, attrs, parent = svg) {
   const e = document.createElementNS(NS, tag);
@@ -139,61 +177,93 @@ function text(x, y, s, cls = 'lbl', anchor = 'middle', parent = svg) {
   t.textContent = s;
   return t;
 }
+function boardLed(x, y, label) {
+  window.boardLedEl = el('circle', {cx: x, cy: y, r: 6, fill: B.ledOff});
+  text(x + 12, y + 4, label, 'lbl', 'start');
+}
 
-function drawBoard() {
+function drawMega() {
+  const P = B.pitch;
   // 板子外形（101.6 x 53.3 mm）
   el('rect', {x: 10, y: 10, width: 1016, height: 533, rx: 14, fill: 'var(--pcb)', stroke: 'var(--pcb-dark)', 'stroke-width': 3});
-  // USB 與電源座
   el('rect', {x: 0, y: 90, width: 160, height: 120, fill: '#b0b7bf', stroke: '#7d858e', 'stroke-width': 2});
   text(80, 156, 'USB', 'lbl big');
   el('rect', {x: 0, y: 400, width: 140, height: 90, fill: '#222', stroke: '#000'});
   text(70, 450, 'DC 7-12V', 'lbl');
-  // 主晶片
   el('rect', {x: 470, y: 210, width: 150, height: 150, fill: '#1b1b1b', stroke: '#000', transform: 'rotate(45 545 285)'});
   text(545, 290, 'ATmega2560', 'lbl');
   text(300, 300, 'ARDUINO', 'lbl big');
   text(300, 318, 'MEGA 2560', 'lbl big');
-  // 13 號腳旁的板載 LED「L」
-  el('rect', {x: 250, y: 120, width: 20, height: 12, fill: '#f6f6f6'});
-  window.boardLed = el('circle', {cx: 260, cy: 145, r: 6, fill: '#5a4a1a'});
-  text(282, 148, 'L', 'lbl', 'start');
+  boardLed(260, 145, 'L');              // 13 號腳旁的板載 LED
   el('circle', {cx: 225, cy: 145, r: 6, fill: '#3bd16f'});
   text(207, 148, 'ON', 'lbl', 'end');
 
   // 上排：Uno 相容的 10 腳 + 8 腳 + Mega 的 8 腳通訊排
   const top = 30;
-  const topA = ['SCL', 'SDA', 'AREF', 'GND', 13, 12, 11, 10, 9, 8];
-  topA.forEach((n, i) => addPin(172 + i * P, top, n, 'below'));
+  ['SCL', 'SDA', 'AREF', 'GND', 13, 12, 11, 10, 9, 8].forEach((n, i) => addPin(172 + i * P, top, n, 'below'));
   [7, 6, 5, 4, 3, 2, 1, 0].forEach((n, i) => addPin(445 + i * P, top, n, 'below'));
   [14, 15, 16, 17, 18, 19, 20, 21].forEach((n, i) => addPin(660 + i * P, top, n, 'below'));
   text(560, 100, 'DIGITAL (PWM ~)', 'lbl');
   text(750, 100, 'COMMUNICATION', 'lbl');
 
   // 右側雙排 22~53
-  addPin(940, 80, '5V', 'left', true); addPin(940 + P, 80, '5V', 'right', true);
+  addPin(940, 80, '5V', 'left'); addPin(940 + P, 80, '5V', 'right');
   for (let r = 0; r < 16; r++) {
     const y = 80 + (r + 1) * P;
     addPin(940, y, 22 + r * 2, 'left');
     addPin(940 + P, y, 23 + r * 2, 'right');
   }
-  addPin(940, 80 + 17 * P, 'GND', 'left', true); addPin(940 + P, 80 + 17 * P, 'GND', 'right', true);
+  addPin(940, 80 + 17 * P, 'GND', 'left'); addPin(940 + P, 80 + 17 * P, 'GND', 'right');
 
   // 下排：電源 8 腳 + A0~A7 + A8~A15
   const bot = 515;
-  ['NC', 'IOREF', 'RESET', '3.3V', '5V', 'GND', 'GND', 'VIN'].forEach((n, i) => addPin(270 + i * P, bot, n, 'above', true));
+  ['NC', 'IOREF', 'RESET', '3.3V', '5V', 'GND', 'GND', 'VIN'].forEach((n, i) => addPin(270 + i * P, bot, n, 'above'));
   for (let i = 0; i < 8; i++) addPin(500 + i * P, bot, 'A' + i, 'above');
   for (let i = 0; i < 8; i++) addPin(720 + i * P, bot, 'A' + (8 + i), 'above');
   text(360, 425, 'POWER', 'lbl');
   text(720, 410, 'ANALOG IN', 'lbl');
 }
 
-function addPin(x, y, name, labelPos, power = false) {
+function drawEsp32() {
+  // Ai-Thinker NodeMCU-32 V1.3（ESP-32S 模組，38 腳）橫放：左邊 USB，右邊天線
+  const P = B.pitch, x0 = 120;
+  el('rect', {x: 50, y: 40, width: 1010, height: 390, rx: 10, fill: '#1c2230', stroke: '#0c0f16', 'stroke-width': 3});
+  el('rect', {x: 10, y: 195, width: 90, height: 80, fill: '#b0b7bf', stroke: '#7d858e', 'stroke-width': 2});
+  text(55, 240, 'USB', 'lbl big');
+  // 金屬罩模組 + 天線
+  el('rect', {x: 660, y: 175, width: 300, height: 145, fill: '#c9ced6', stroke: '#8a919c', 'stroke-width': 2});
+  text(810, 253, 'ESP-32S', 'lbl big').setAttribute('style', 'fill:#2b3240');
+  el('path', {d: 'M 985 185 v 125 M 1000 185 h 15 v 30 h -15 v 30 h 15 v 30 h -15 v 30', fill: 'none', stroke: '#c9a227', 'stroke-width': 4});
+  // USB 旁的兩顆按鈕：IO0（BOOT）與 EN
+  el('rect', {x: 125, y: 300, width: 40, height: 30, fill: '#ddd', stroke: '#999'});
+  text(145, 348, 'IO0', 'lbl');
+  el('rect', {x: 125, y: 140, width: 40, height: 30, fill: '#ddd', stroke: '#999'});
+  text(145, 132, 'EN', 'lbl');
+  el('rect', {x: 260, y: 190, width: 120, height: 70, fill: '#111', stroke: '#000'});
+  text(320, 230, 'CH340', 'lbl');
+  boardLed(440, 200, 'GPIO2');
+  el('circle', {cx: 440, cy: 270, r: 6, fill: '#e04444'});
+  text(452, 274, 'PWR', 'lbl', 'start');
+  text(560, 300, 'NODEMCU-32', 'lbl big');
+
+  // 上排（左到右）與下排（左到右），USB 端在左
+  const top = ['5V', 'CMD', 'SD3', 'SD2', 13, 'GND', 12, 14, 27, 26, 25, 33, 32, 35, 34, 39, 36, 'EN', '3V3'];
+  const bot = ['CLK', 'SD0', 'SD1', 15, 2, 0, 4, 16, 17, 5, 18, 19, 'GND', 21, 3, 1, 22, 23, 'GND'];
+  top.forEach((n, i) => addPin(x0 + i * P, 70, n, 'below'));
+  bot.forEach((n, i) => addPin(x0 + i * P, 400, n, 'above'));
+}
+
+function addPin(x, y, name, labelPos) {
   const g = el('g', {class: 'pin'});
   el('rect', {x: x - 10, y: y - 10, width: 20, height: 20, class: 'hole'}, g);
   el('circle', {cx: x, cy: y, r: 5.5, class: 'led'}, g);
   const isNum = typeof name === 'number';
-  const isAnalog = typeof name === 'string' && /^A\d+$/.test(name);
-  let label = isNum && PWM.has(name) ? '~' + name : String(name);
+  const isMegaAnalog = typeof name === 'string' && /^A\d+$/.test(name);
+  let label = String(name);
+  if (isNum && B.labels && B.labels[name]) label = B.labels[name];
+  else if (isNum && B.markPwm && B.pwm.has(name)) label = '~' + name;
+  if (isNum && name in B.locked) label = B.locked[name];
+
   let lbl;
   if (labelPos === 'left' || labelPos === 'right') {
     lbl = text(labelPos === 'left' ? x - 16 : x + 16, y + 4, label, 'lbl', labelPos === 'left' ? 'end' : 'start', g);
@@ -204,40 +274,34 @@ function addPin(x, y, name, labelPos, power = false) {
     lbl.setAttribute('transform', `rotate(-90 ${x + 4} ${ly})`);
   }
 
-  if (!isNum && !isAnalog) {           // 電源、通訊等不能控制的腳
+  if ((!isNum && !isMegaAnalog) || (isNum && name in B.locked)) {   // 電源、通訊等不能控制的腳
     g.classList.add('locked');
-    g.style.opacity = power ? .6 : .6;
     return;
   }
-  const key = isAnalog ? name : 'D' + name;
-  const p = {key, num: isAnalog ? +name.slice(1) : name, analog: isAnalog, mode: isAnalog ? 'analog' : 'none', value: 0, el: g};
-  if (isAnalog) {
-    g.classList.add('analog');
-    p.valText = lbl;      // 類比值直接寫在標籤後面，例如「A0 512」
-  }
-  if (isNum && name <= 1) {
-    g.classList.add('locked');
-    g.querySelector('text').textContent = name === 0 ? 'RX0' : 'TX0';
-    return;
-  }
+  const analog = isMegaAnalog || B.analogOnly.has(name);
+  const key = isMegaAnalog ? name : 'D' + name;
+  const p = {key, num: isMegaAnalog ? +name.slice(1) : name, analog, label,
+             mode: analog ? 'analog' : 'none', value: 0, el: g, valText: lbl};
+  if (analog) g.classList.add('analog');
   pins[key] = p;
   g.addEventListener('click', () => onPinClick(p));
   const t = el('title', {}, g);
-  t.textContent = isAnalog ? name + '（類比輸入）' : name + ' 號腳' + (PWM.has(name) ? '（可 PWM）' : '');
+  t.textContent = analog ? label + '（類比輸入）' : label + ' 號腳' + (B.pwm.has(name) ? '（可 PWM）' : '');
 }
 
 // ---------- 畫面更新 ----------
 function paint(p) {
   const c = p.el.classList;
-  c.remove('out-high', 'pwm-on', 'in-high', 'in-low');
+  c.remove('out-high', 'pwm-on', 'in-high', 'in-low', 'adc');
   if (p.mode === 'out' && p.value) c.add('out-high');
   if (p.mode === 'pwm' && p.value > 0) c.add('pwm-on');
   if (p.mode === 'in') c.add(p.value ? 'in-high' : 'in-low');
-  if (p.mode === 'pwm') p.el.querySelector('circle.led').style.opacity = 0.3 + 0.7 * p.value / 255;
-  else p.el.querySelector('circle.led').style.opacity = '';
-  if (p.key === 'D13') {
+  if (p.mode === 'adc') c.add('adc');
+  p.el.querySelector('circle.led').style.opacity = p.mode === 'pwm' ? 0.3 + 0.7 * p.value / 255 : '';
+  if (p.mode !== 'adc' && !p.analog) { p.valText.textContent = p.label; p.valText.classList.remove('live'); }
+  if (p.num === B.ledPin && !p.analog) {
     const on = (p.mode === 'out' && p.value) || (p.mode === 'pwm' && p.value > 0);
-    boardLed.setAttribute('fill', on ? '#ffd23f' : '#5a4a1a');
+    boardLedEl.setAttribute('fill', on ? B.ledOn : B.ledOff);
   }
   if (p === selected) renderPanel();
 }
@@ -251,10 +315,23 @@ function select(p) {
 
 function onPinClick(p) {
   select(p);
-  if (p.analog) return;
+  if (p.analog || p.mode === 'adc') return;
   // 還沒用過的腳：點一下就當輸出、變 HIGH；已經是輸出：點一下切換
   if (p.mode === 'none') setOut(p, 1);
   else if (p.mode === 'out') setOut(p, p.value ? 0 : 1);
+}
+
+function analogView(body) {
+  const p = selected;
+  body.innerHTML = `<div class="big-val">${autoOn ? p.value : '--'}</div>
+    <div class="hint">${(p.value * B.vref / B.adcMax).toFixed(2)} V</div>`;
+  if (!autoOn) {
+    const b = document.createElement('button');
+    b.textContent = '開始讀取類比值';
+    b.className = 'primary';
+    b.onclick = () => setAuto(true);
+    body.appendChild(b);
+  }
 }
 
 function renderPanel() {
@@ -264,24 +341,19 @@ function renderPanel() {
   const modes = document.getElementById('pModes');
   const body = document.getElementById('pBody');
   modes.innerHTML = ''; body.innerHTML = '';
+  const range = `讀到 0～${B.adcMax}（0V～${B.vref}V）`;
   if (p.analog) {
-    name.textContent = p.key;
-    hint.textContent = '類比輸入，讀到 0～1023（0V～5V）';
-    body.innerHTML = `<div class="big-val">${autoOn ? p.value : '--'}</div>
-      <div class="hint">${(p.value * 5 / 1023).toFixed(2)} V</div>`;
-    if (!autoOn) {
-      const b = document.createElement('button');
-      b.textContent = '開始讀取類比值';
-      b.className = 'primary';
-      b.onclick = () => setAuto(true);
-      body.appendChild(b);
-    }
+    name.textContent = p.label;
+    hint.textContent = '類比輸入，' + range;
+    analogView(body);
     return;
   }
-  name.textContent = (PWM.has(p.num) ? '~' : '') + p.num + ' 號腳';
-  hint.textContent = PWM.has(p.num) ? '數位腳，可以 PWM' : '數位腳';
-  const list = [['out', '輸出'], ['in', '輸入']];
-  if (PWM.has(p.num)) list.splice(1, 0, ['pwm', 'PWM']);
+  name.textContent = (B.markPwm && B.pwm.has(p.num) ? '~' : '') + p.num + ' 號腳';
+  hint.textContent = B.pwm.has(p.num) ? '數位腳，可以 PWM' : '數位腳';
+  const list = [['out', '輸出']];
+  if (B.pwm.has(p.num)) list.push(['pwm', 'PWM']);
+  list.push(['in', '輸入']);
+  if (B.adcCapable.has(p.num)) list.push(['adc', '類比']);
   for (const [m, label] of list) {
     const b = document.createElement('button');
     b.textContent = label;
@@ -290,6 +362,7 @@ function renderPanel() {
       if (m === 'out') setOut(p, p.mode === 'out' ? p.value : 0);
       if (m === 'pwm') setPwm(p, p.mode === 'pwm' ? p.value : 128);
       if (m === 'in') setIn(p);
+      if (m === 'adc') setAdc(p);
     };
     modes.appendChild(b);
   }
@@ -310,6 +383,9 @@ function renderPanel() {
   } else if (p.mode === 'in') {
     body.innerHTML = `<div class="big-val">${p.value ? 'HIGH' : 'LOW'}</div>
       <div class="hint">已開內建上拉：沒接東西是 HIGH，接到 GND（按鈕按下）是 LOW</div>`;
+  } else if (p.mode === 'adc') {
+    hint.textContent = '類比輸入，' + range;
+    analogView(body);
   } else {
     body.innerHTML = '<div class="hint">選一種用法</div>';
   }
@@ -347,15 +423,22 @@ function setIn(p) {
   code([...needMode(p, 'INPUT_PULLUP'), `int s${p.num} = digitalRead(${p.num});`]);
   paint(p);
 }
+function setAdc(p) {                  // ESP32 的 32、33 切成類比
+  if (!send(`R${p.num}`)) return;
+  p.mode = 'adc'; p.value = 0;
+  delete declared[p.num];
+  code([`int v${p.num} = analogRead(${p.num});`]);
+  paint(p);
+}
 let autoOn = false;
 function setAuto(on) {
   if (!send(`AUTO=${on ? 1 : 0}`)) return;
   autoOn = on;
-  if (on) code(['int v = analogRead(A0);   // A0~A15 都一樣']);
+  if (on && selected) code([`int v = analogRead(${B.analogName(selected)});`]);
   if (selected) renderPanel();
 }
 
-// ---------- 收到 Mega 的回報 ----------
+// ---------- 收到板子的回報 ----------
 function onLine(s) {
   if (!s.startsWith('A:')) log('← ' + s);   // 類比值每 0.2 秒一次，不記，免得洗版
   let m;
@@ -364,10 +447,10 @@ function onLine(s) {
     if (p) { p.mode = 'in'; p.value = +m[2]; paint(p); }
   } else if (s.startsWith('A:')) {
     s.slice(2).split(',').forEach((v, i) => {
-      const p = pins['A' + i];
-      if (!p) return;
+      const p = pins[B.analogOrder[i]];
+      if (!p || v === '-' || !(p.analog || p.mode === 'adc')) return;
       p.value = +v;
-      p.valText.textContent = p.key + ' ' + v;
+      p.valText.textContent = p.label + ' ' + v;
       p.valText.classList.add('live');
       if (p === selected) renderPanel();
     });
@@ -375,17 +458,23 @@ function onLine(s) {
     // 自己打的指令也讓板子圖跟著變
     const p = pins['D' + m[2]];
     if (p) { p.mode = m[1] === 'D' ? 'out' : 'pwm'; p.value = +m[3]; paint(p); }
-  } else if (s.startsWith('READY')) {
-    setStatus(true, '● 已連線');
+  } else if ((m = /(MEGA-IO|ESP32-IO)/.exec(s))) {
+    gotHello = true;
+    if (m[1] === B.fw) setStatus(true, '● 已連線');
+    else {
+      const other = m[1] === 'MEGA-IO' ? 'mega' : 'esp32';
+      setStatus(false, `● 接的是 ${BOARDS[other].name}，請切換上方的板子`);
+    }
   }
 }
 
 // ---------- 序列埠 ----------
-let port = null, writer = null, demo = null;
+let port = null, writer = null, demo = null, gotHello = false;
 const enc = new TextEncoder();
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function send(cmd) {
-  if (!writer && !demo) { log('（還沒連接 Mega）'); flash(); return false; }
+  if (!writer && !demo) { log('（還沒連接板子）'); flash(); return false; }
   log('→ ' + cmd);
   if (demo) demo(cmd); else writer.write(enc.encode(cmd + '\n'));
   return true;
@@ -398,14 +487,33 @@ async function connect() {
   }
   try {
     port = await navigator.serial.requestPort();
+  } catch (e) { log('沒有選 COM 埠，取消連接'); return; }
+  try {
     await port.open({baudRate: 115200});
-  } catch (e) { log('連接取消：' + e.message); return; }
+  } catch (e) {
+    // 最常見：同一個 COM 埠已經被別的分頁、序列埠監控視窗或其他程式打開
+    log('打不開這個 COM 埠：' + e.message);
+    setStatus(false, '● COM 埠被佔用：關掉其他控制台分頁或序列埠監控視窗再試');
+    port = null;
+    return;
+  }
   writer = port.writable.getWriter();
-  demo = null;
-  setStatus(true, '● 連線中，等 Mega 重新開機…');
+  demo = null; gotHello = false;
+  setStatus(true, '● 連線中，等板子重新開機…');
   document.getElementById('btnReset').disabled = false;
   readLoop();
   port.addEventListener('disconnect', () => { writer = null; port = null; setStatus(false, '● 已中斷'); });
+  if (boardId === 'esp32') {
+    // 像 Arduino IDE 上傳完一樣，用 RTS 讓 ESP32 重新開機（DTR 保持放開，才不會進燒錄模式）
+    try {
+      await port.setSignals({dataTerminalReady: false, requestToSend: true});
+      await sleep(120);
+      await port.setSignals({requestToSend: false});
+    } catch (e) { log('無法自動重開機，請按板子上的 EN'); }
+  }
+  // 等開機訊息；沒等到就主動問一次
+  for (let i = 0; i < 30 && !gotHello; i++) await sleep(100);
+  if (!gotHello && writer) send('?');
 }
 
 async function readLoop() {
@@ -427,30 +535,38 @@ async function readLoop() {
   } catch (e) { log('讀取中斷：' + e.message); }
 }
 
-// 沒有板子時的模擬：照 Mega 程式的方式回話
+// 沒有板子時的模擬：照板子上程式的方式回話
+let demoTimer = null;
 function startDemo() {
+  const adcOn = {};
   demo = (cmd) => {
     setTimeout(() => {
       let m;
       if ((m = /^I(\d+)$/.exec(cmd))) { onLine('OK ' + cmd); onLine(`D${m[1]}:1`); }
-      else if (cmd === 'AUTO=1') { onLine('OK ' + cmd); demoTimer = setInterval(() => onLine('A:' + Array.from({length: 16}, (_, i) => Math.round(400 + 300 * Math.sin(Date.now() / 1500 + i))).join(',')), 300); }
+      else if ((m = /^R(\d+)$/.exec(cmd))) { adcOn['D' + m[1]] = true; onLine('OK ' + cmd); }
+      else if (cmd === 'AUTO=1') {
+        onLine('OK ' + cmd);
+        clearInterval(demoTimer);
+        demoTimer = setInterval(() => onLine('A:' + B.analogOrder.map((k, i) =>
+          B.adcCapable.has(+k.slice(1)) && !adcOn[k] ? '-' :
+          Math.round(B.adcMax * (0.45 + 0.35 * Math.sin(Date.now() / 1500 + i)))).join(',')), 300);
+      }
       else if (cmd === 'AUTO=0') { onLine('OK ' + cmd); clearInterval(demoTimer); }
       else onLine('OK ' + cmd);
     }, 60);
   };
-  setStatus(true, '● 模擬模式（沒接板子）');
   document.getElementById('btnReset').disabled = false;
-  onLine('READY MEGA-IO v1（模擬）');
+  onLine(`READY ${B.fw} v1（模擬）`);
   setStatus(true, '● 模擬模式（沒接板子）');
 }
-let demoTimer = null;
 
 function resetAll() {
   if (!send('RESET')) return;
   for (const k in pins) {
     const p = pins[k];
-    if (!p.analog) { p.mode = 'none'; p.value = 0; paint(p); }
-    else { p.valText.textContent = p.key; p.valText.classList.remove('live'); p.value = 0; }
+    p.value = 0;
+    if (!p.analog) { p.mode = 'none'; paint(p); }
+    else { p.valText.textContent = p.label; p.valText.classList.remove('live'); }
   }
   autoOn = false; clearInterval(demoTimer);
   for (const k in declared) delete declared[k];
@@ -474,6 +590,16 @@ function flash() {
   b.animate([{transform: 'scale(1)'}, {transform: 'scale(1.12)'}, {transform: 'scale(1)'}], {duration: 400});
 }
 
+document.title = B.name + ' 網頁控制台';
+document.getElementById('title').textContent = B.name.toUpperCase() + ' 網頁控制台';
+document.getElementById(boardId === 'esp32' ? 'tabEsp32' : 'tabMega').className = 'act';
+document.getElementById('btnConnect').textContent = '連接 ' + B.name;
+document.getElementById('legendNote').textContent = B.note;
+document.getElementById('sideNote').textContent = B.sideNote;
+document.getElementById('cmd').placeholder = `自己打指令，例如 D${B.ledPin}=1`;
+svg.setAttribute('viewBox', B.viewBox);
+svg.setAttribute('aria-label', B.name);
+
 document.getElementById('btnConnect').onclick = connect;
 document.getElementById('btnDemo').onclick = startDemo;
 document.getElementById('btnReset').onclick = resetAll;
@@ -490,7 +616,7 @@ document.getElementById('btnClearCode').onclick = () => {
 };
 document.getElementById('btnCopyCode').onclick = () => navigator.clipboard.writeText(document.getElementById('code').textContent);
 
-drawBoard();
+B.draw();
 </script>
 </body>
 </html>
