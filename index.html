@@ -4,19 +4,27 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>開發板網頁控制台</title>
+<!-- 開發板網頁控制台：整支程式都在這個檔案，從上到下分成三大部分
+     1. CSS（style）：外觀，例如顏色、大小、位置
+     2. HTML（body）：畫面上有哪些東西，例如按鈕、區塊
+     3. JavaScript（script）：動作，例如按下按鈕後要做什麼 -->
 <style>
+/* 顏色變數：集中設定，其他地方用 var(--名稱) 取用 */
 :root{
   --bg:#f4f1ea; --panel:#fffdf8; --ink:#14213d; --muted:#5b6475; --line:#d8d2c4;
   --navy:#14213d; --gold:#c9a227; --red:#c0392b;
   --pcb:#00838f; --pcb-dark:#006064; --silk:#e8f6f7; --hdr:#1d1d1d;
   --high:#ff5a36; --low:#3a4a52; --in:#3fa7ff; --pwm:#ffb300;
 }
+/* 電腦設成深色模式時，換一組顏色 */
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#0d1321; --panel:#151d2e; --ink:#e8ecf3; --muted:#9aa5b8; --line:#2a3550;
   --navy:#0a1020; --pcb:#00727c; --pcb-dark:#00525a;
 }}
+/* 整體版面與文字 */
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;line-height:1.6}
+/* 上方標題列 */
 header{background:var(--navy);color:#fff;border-bottom:3px solid var(--gold);padding:12px 16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center}
 header h1{font-size:1.15rem;margin:0;letter-spacing:.06em}
 header .sub{font-size:.8rem;color:#b9c2d6}
@@ -24,6 +32,7 @@ header .sub{font-size:.8rem;color:#b9c2d6}
 .tabs a{color:#b9c2d6;text-decoration:none;padding:4px 14px;font-size:.9rem}
 .tabs a.act{background:var(--gold);color:#14213d;font-weight:700}
 .bar{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+/* 按鈕 */
 button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 14px;cursor:pointer;border-radius:2px}
 button:hover{border-color:var(--gold)}
 button.primary{background:var(--gold);border-color:var(--gold);color:#14213d;font-weight:700}
@@ -31,16 +40,21 @@ header button{background:transparent;color:#fff;border-color:#4a5675}
 header button.primary{background:var(--gold);color:#14213d}
 #status{font-family:Consolas,monospace;font-size:.85rem}
 #status.on{color:#7ee08a} #status.off{color:#ff9b8a}
+/* 主要版面：左邊板子、右邊面板，螢幕窄時改成一欄 */
 main{max-width:1200px;margin:0 auto;padding:16px;display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px}
 main>*,main section{min-width:0}
 @media (max-width:900px){main{grid-template-columns:1fr}}
+/* 每個區塊的外框與標題 */
 section{background:var(--panel);border:1px solid var(--line);padding:12px}
 h2{font-size:.95rem;margin:0 0 8px;padding-bottom:6px;border-bottom:1px solid var(--line);letter-spacing:.05em}
+/* 板子圖 */
 .boardwrap{overflow-x:auto}
 svg#board{width:100%;min-width:640px;height:auto;display:block}
+/* 腳位的基本樣子 */
 .pin{cursor:pointer}
 .pin rect.hole{fill:var(--hdr);stroke:#000;stroke-width:.6}
 .pin circle.led{fill:var(--low);transition:fill .12s}
+/* 腳位狀態的顏色：JavaScript 換 class，顏色就跟著變 */
 .pin.out-high circle.led{fill:var(--high)}
 .pin.pwm-on circle.led{fill:var(--pwm)}
 .pin.in-high circle.led{fill:var(--in)}
@@ -49,19 +63,24 @@ svg#board{width:100%;min-width:640px;height:auto;display:block}
 .pin.locked{cursor:not-allowed;opacity:.45}
 .pin.sel rect.hole{stroke:var(--gold);stroke-width:2.4}
 .pin:hover rect.hole{stroke:var(--gold);stroke-width:1.6}
+/* 板子上的文字 */
 .lbl{font-family:Consolas,monospace;font-size:12px;fill:var(--silk);pointer-events:none}
 .lbl.big{font-size:18px;font-weight:700;letter-spacing:.08em}
 .lbl.live{fill:#ffe082;font-weight:700}
+/* 顏色圖例 */
 .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.8rem;color:var(--muted);margin-top:8px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+/* 右側腳位面板 */
 #panel .name{font-family:Consolas,monospace;font-size:1.6rem;font-weight:700}
 #panel .hint{color:var(--muted);font-size:.85rem}
 .modes{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
 .modes button.act{background:var(--navy);color:#fff;border-color:var(--navy)}
 .big-val{font-family:Consolas,monospace;font-size:2.4rem;font-weight:700}
 input[type=range]{width:100%}
+/* 程式碼區與通訊紀錄 */
 pre{background:var(--navy);color:#e9e3c9;font-family:Consolas,monospace;font-size:.82rem;padding:10px;margin:0;max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
 #log{background:#0b0f19;color:#9fe0a8}
+/* 指令輸入列與其他小元件 */
 .row{display:flex;gap:8px;align-items:center;margin-top:8px}
 .row input[type=text]{flex:1;font:inherit;font-family:Consolas,monospace;padding:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
 .side{display:grid;gap:16px;align-content:start}
@@ -69,6 +88,7 @@ pre{background:var(--navy);color:#e9e3c9;font-family:Consolas,monospace;font-siz
 </style>
 </head>
 <body>
+<!-- 上方標題列：板子分頁、連線狀態、三顆主要按鈕 -->
 <header>
   <div>
     <h1 id="title">網頁控制台</h1>
@@ -83,9 +103,11 @@ pre{background:var(--navy);color:#e9e3c9;font-family:Consolas,monospace;font-siz
   </div>
 </header>
 
+<!-- 主要內容：左邊是板子和程式碼，右邊是腳位面板和通訊紀錄 -->
 <main>
   <div style="display:grid;gap:16px">
     <section>
+      <!-- 板子圖：svg 先留空，由 JavaScript 畫進去 -->
       <h2>板子</h2>
       <div class="boardwrap"><svg id="board"></svg></div>
       <div class="legend">
@@ -98,6 +120,7 @@ pre{background:var(--navy);color:#e9e3c9;font-family:Consolas,monospace;font-siz
       </div>
     </section>
     <section>
+      <!-- 操作腳位時，自動產生的 Arduino 程式 -->
       <h2>對應的 Arduino 程式</h2>
       <pre id="code">// 點腳位後，這裡會出現同樣效果的程式碼</pre>
       <div class="row"><button id="btnClearCode">清除</button><button id="btnCopyCode">複製</button></div>
@@ -105,6 +128,7 @@ pre{background:var(--navy);color:#e9e3c9;font-family:Consolas,monospace;font-siz
   </div>
 
   <div class="side">
+    <!-- 目前選取的腳位：內容由 JavaScript 依狀態填入 -->
     <section id="panel">
       <h2>腳位</h2>
       <div class="name" id="pName">—</div>
@@ -113,6 +137,7 @@ pre{background:var(--navy);color:#e9e3c9;font-family:Consolas,monospace;font-siz
       <div id="pBody"></div>
     </section>
     <section>
+      <!-- 通訊紀錄，也可以自己打指令 -->
       <h2>通訊紀錄</h2>
       <pre id="log"></pre>
       <div class="row"><input type="text" id="cmd" placeholder="自己打指令，例如 D13=1"><button id="btnSend">送出</button></div>
@@ -122,6 +147,9 @@ pre{background:var(--navy);color:#e9e3c9;font-family:Consolas,monospace;font-siz
 </main>
 
 <script>
+// JavaScript 依序分成：板子設定、畫板子、更新畫面、送指令與產生程式、
+// 收板子回報、序列埠、模擬模式、小工具、啟動設定
+
 // ---------- 兩種板子的差別都寫在這裡 ----------
 const BOARDS = {
   mega: {
@@ -156,32 +184,38 @@ const BOARDS = {
     draw: drawEsp32,
   },
 };
+// 網址有 ?board=esp32 就用 ESP32，其他情況用 Mega；B 是目前這塊板子的設定
 const boardId = new URLSearchParams(location.search).get('board') === 'esp32' ? 'esp32' : 'mega';
 const B = BOARDS[boardId];
 
 const pins = {};          // key: "D9" / "A0" → {key, num, analog, mode, value, el, valText}
+// 目前選取的腳位
 let selected = null;
 
 // ---------- 畫板子 ----------
 const NS = 'http://www.w3.org/2000/svg';
 const svg = document.getElementById('board');
 
+// 建立一個 SVG 圖形，放進畫面
 function el(tag, attrs, parent = svg) {
   const e = document.createElementNS(NS, tag);
   for (const k in attrs) e.setAttribute(k, attrs[k]);
   parent.appendChild(e);
   return e;
 }
+// 在板子圖上寫字
 function text(x, y, s, cls = 'lbl', anchor = 'middle', parent = svg) {
   const t = el('text', {x, y, class: cls, 'text-anchor': anchor}, parent);
   t.textContent = s;
   return t;
 }
+// 畫板載 LED，之後會隨腳位狀態變色
 function boardLed(x, y, label) {
   window.boardLedEl = el('circle', {cx: x, cy: y, r: 6, fill: B.ledOff});
   text(x + 12, y + 4, label, 'lbl', 'start');
 }
 
+// 畫 Mega 2560：外形、元件和所有腳位
 function drawMega() {
   const P = B.pitch;
   // 板子外形（101.6 x 53.3 mm）
@@ -224,6 +258,7 @@ function drawMega() {
   text(720, 410, 'ANALOG IN', 'lbl');
 }
 
+// 畫 ESP32：外形、元件和所有腳位
 function drawEsp32() {
   // Ai-Thinker NodeMCU-32 V1.3（ESP-32S 模組，38 腳）橫放：左邊 USB，右邊天線
   const P = B.pitch, x0 = 120;
@@ -253,10 +288,12 @@ function drawEsp32() {
   bot.forEach((n, i) => addPin(x0 + i * P, 400, n, 'above'));
 }
 
+// 畫一隻腳；可以控制的腳還會記到 pins，並掛上點擊事件
 function addPin(x, y, name, labelPos) {
   const g = el('g', {class: 'pin'});
   el('rect', {x: x - 10, y: y - 10, width: 20, height: 20, class: 'hole'}, g);
   el('circle', {cx: x, cy: y, r: 5.5, class: 'led'}, g);
+  // 判斷腳名：數字是數位腳，A 開頭是 Mega 的類比腳
   const isNum = typeof name === 'number';
   const isMegaAnalog = typeof name === 'string' && /^A\d+$/.test(name);
   let label = String(name);
@@ -264,6 +301,7 @@ function addPin(x, y, name, labelPos) {
   else if (isNum && B.markPwm && B.pwm.has(name)) label = '~' + name;
   if (isNum && name in B.locked) label = B.locked[name];
 
+  // 依腳位所在的位置寫上腳名
   let lbl;
   if (labelPos === 'left' || labelPos === 'right') {
     lbl = text(labelPos === 'left' ? x - 16 : x + 16, y + 4, label, 'lbl', labelPos === 'left' ? 'end' : 'start', g);
@@ -278,18 +316,21 @@ function addPin(x, y, name, labelPos) {
     g.classList.add('locked');
     return;
   }
+  // 建立這隻腳的資料：mode 是用法，value 是目前的數值
   const analog = isMegaAnalog || B.analogOnly.has(name);
   const key = isMegaAnalog ? name : 'D' + name;
   const p = {key, num: isMegaAnalog ? +name.slice(1) : name, analog, label,
              mode: analog ? 'analog' : 'none', value: 0, el: g, valText: lbl};
   if (analog) g.classList.add('analog');
   pins[key] = p;
+  // 點下去就執行 onPinClick
   g.addEventListener('click', () => onPinClick(p));
   const t = el('title', {}, g);
   t.textContent = analog ? label + '（類比輸入）' : label + ' 號腳' + (B.pwm.has(name) ? '（可 PWM）' : '');
 }
 
 // ---------- 畫面更新 ----------
+// 依腳位的 mode 和 value 換 class，CSS 就會改變顏色
 function paint(p) {
   const c = p.el.classList;
   c.remove('out-high', 'pwm-on', 'in-high', 'in-low', 'adc');
@@ -297,8 +338,10 @@ function paint(p) {
   if (p.mode === 'pwm' && p.value > 0) c.add('pwm-on');
   if (p.mode === 'in') c.add(p.value ? 'in-high' : 'in-low');
   if (p.mode === 'adc') c.add('adc');
+  // PWM 數值越大，圓點越不透明
   p.el.querySelector('circle.led').style.opacity = p.mode === 'pwm' ? 0.3 + 0.7 * p.value / 255 : '';
   if (p.mode !== 'adc' && !p.analog) { p.valText.textContent = p.label; p.valText.classList.remove('live'); }
+  // 這隻腳連著板載 LED，要一起更新
   if (p.num === B.ledPin && !p.analog) {
     const on = (p.mode === 'out' && p.value) || (p.mode === 'pwm' && p.value > 0);
     boardLedEl.setAttribute('fill', on ? B.ledOn : B.ledOff);
@@ -306,6 +349,7 @@ function paint(p) {
   if (p === selected) renderPanel();
 }
 
+// 選取腳位：加上外框，並更新右側面板
 function select(p) {
   if (selected) selected.el.classList.remove('sel');
   selected = p;
@@ -313,14 +357,17 @@ function select(p) {
   renderPanel();
 }
 
+// 點腳位時執行
 function onPinClick(p) {
   select(p);
+  // 類比腳只能讀，不送輸出指令
   if (p.analog || p.mode === 'adc') return;
   // 還沒用過的腳：點一下就當輸出、變 HIGH；已經是輸出：點一下切換
   if (p.mode === 'none') setOut(p, 1);
   else if (p.mode === 'out') setOut(p, p.value ? 0 : 1);
 }
 
+// 右側面板：顯示類比值和換算後的電壓
 function analogView(body) {
   const p = selected;
   body.innerHTML = `<div class="big-val">${autoOn ? p.value : '--'}</div>
@@ -334,6 +381,7 @@ function analogView(body) {
   }
 }
 
+// 依選取腳位的狀態，重畫右側面板
 function renderPanel() {
   const p = selected;
   const name = document.getElementById('pName');
@@ -350,6 +398,7 @@ function renderPanel() {
   }
   name.textContent = (B.markPwm && B.pwm.has(p.num) ? '~' : '') + p.num + ' 號腳';
   hint.textContent = B.pwm.has(p.num) ? '數位腳，可以 PWM' : '數位腳';
+  // 列出這隻腳可以選的用法
   const list = [['out', '輸出']];
   if (B.pwm.has(p.num)) list.push(['pwm', 'PWM']);
   list.push(['in', '輸入']);
@@ -366,6 +415,7 @@ function renderPanel() {
     };
     modes.appendChild(b);
   }
+  // 依目前的用法，顯示對應的控制項
   if (p.mode === 'out') {
     body.innerHTML = `<div class="big-val">${p.value ? 'HIGH' : 'LOW'}</div>`;
     const b = document.createElement('button');
@@ -393,30 +443,35 @@ function renderPanel() {
 
 // ---------- 動作 → 送指令 + 程式碼 ----------
 const declared = {};      // 程式碼裡已經 pinMode 過的腳
+// 把產生的 Arduino 程式加到畫面下方
 function code(lines) {
   const pre = document.getElementById('code');
   if (pre.dataset.empty !== 'no') { pre.textContent = ''; pre.dataset.empty = 'no'; }
   pre.textContent += lines.join('\n') + '\n';
   pre.scrollTop = pre.scrollHeight;
 }
+// 用法沒變時回傳空陣列，同一隻腳不重複印 pinMode
 function needMode(p, mode) {
   if (declared[p.num] === mode) return [];
   declared[p.num] = mode;
   return [`pinMode(${p.num}, ${mode});`];
 }
 
+// 數位輸出：先送指令，送不出去就返回；成功才改狀態、產生程式、更新畫面
 function setOut(p, v) {
   if (!send(`D${p.num}=${v}`)) return;
   p.mode = 'out'; p.value = v;
   code([...needMode(p, 'OUTPUT'), `digitalWrite(${p.num}, ${v ? 'HIGH' : 'LOW'});`]);
   paint(p);
 }
+// PWM 輸出，數值 0～255
 function setPwm(p, v) {
   if (!send(`P${p.num}=${v}`)) return;
   p.mode = 'pwm'; p.value = v;
   code([...needMode(p, 'OUTPUT'), `analogWrite(${p.num}, ${v});`]);
   paint(p);
 }
+// 設成數位輸入
 function setIn(p) {
   if (!send(`I${p.num}`)) return;
   p.mode = 'in';
@@ -431,6 +486,7 @@ function setAdc(p) {                  // ESP32 的 32、33 切成類比
   paint(p);
 }
 let autoOn = false;
+// 開始或停止連續回報類比值
 function setAuto(on) {
   if (!send(`AUTO=${on ? 1 : 0}`)) return;
   autoOn = on;
@@ -439,13 +495,16 @@ function setAuto(on) {
 }
 
 // ---------- 收到板子的回報 ----------
+// 處理板子回傳的一行文字，依開頭判斷意思
 function onLine(s) {
   if (!s.startsWith('A:')) log('← ' + s);   // 類比值每 0.2 秒一次，不記，免得洗版
   let m;
   if ((m = /^D(\d+):([01])$/.exec(s))) {
+    // D22:0：輸入腳的狀態
     const p = pins['D' + m[1]];
     if (p) { p.mode = 'in'; p.value = +m[2]; paint(p); }
   } else if (s.startsWith('A:')) {
+    // A:512,13,...：類比值，用逗號拆開後填到各腳
     s.slice(2).split(',').forEach((v, i) => {
       const p = pins[B.analogOrder[i]];
       if (!p || v === '-' || !(p.analog || p.mode === 'adc')) return;
@@ -459,6 +518,7 @@ function onLine(s) {
     const p = pins['D' + m[2]];
     if (p) { p.mode = m[1] === 'D' ? 'out' : 'pwm'; p.value = +m[3]; paint(p); }
   } else if ((m = /(MEGA-IO|ESP32-IO)/.exec(s))) {
+    // 開機訊息或版本回覆：確認接的是哪塊板子
     gotHello = true;
     if (m[1] === B.fw) setStatus(true, '● 已連線');
     else {
@@ -469,26 +529,33 @@ function onLine(s) {
 }
 
 // ---------- 序列埠 ----------
+// port：序列埠；writer：寫入用；demo：模擬模式；gotHello：是否收到開機訊息
 let port = null, writer = null, demo = null, gotHello = false;
+// 序列埠傳的是位元組，文字要先編碼
 const enc = new TextEncoder();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// 送一行指令；有送出就回傳 true，沒連線回傳 false
 function send(cmd) {
   if (!writer && !demo) { log('（還沒連接板子）'); flash(); return false; }
   log('→ ' + cmd);
+  // 結尾加換行，板子看到換行才知道這句話結束
   if (demo) demo(cmd); else writer.write(enc.encode(cmd + '\n'));
   return true;
 }
 
+// 連接板子：選 COM 埠、打開序列埠、開始讀資料
 async function connect() {
   if (!('serial' in navigator)) {
     alert('這個瀏覽器不支援 Web Serial，請用 Chrome 或 Edge 開啟。');
     return;
   }
   try {
+    // 跳出視窗讓使用者選 COM 埠
     port = await navigator.serial.requestPort();
   } catch (e) { log('沒有選 COM 埠，取消連接'); return; }
   try {
+    // 鮑率要和 Arduino 程式相同
     await port.open({baudRate: 115200});
   } catch (e) {
     // 最常見：同一個 COM 埠已經被別的分頁、序列埠監控視窗或其他程式打開
@@ -497,10 +564,12 @@ async function connect() {
     port = null;
     return;
   }
+  // 取得寫入用的 writer
   writer = port.writable.getWriter();
   demo = null; gotHello = false;
   setStatus(true, '● 連線中，等板子重新開機…');
   document.getElementById('btnReset').disabled = false;
+  // 開始持續讀板子的回話
   readLoop();
   port.addEventListener('disconnect', () => { writer = null; port = null; setStatus(false, '● 已中斷'); });
   if (boardId === 'esp32') {
@@ -516,6 +585,7 @@ async function connect() {
   if (!gotHello && writer) send('?');
 }
 
+// 持續讀板子的回話；資料可能分段送到，等到換行才處理
 async function readLoop() {
   const dec = new TextDecoder();
   let buf = '';
@@ -524,8 +594,10 @@ async function readLoop() {
     while (true) {
       const {value, done} = await reader.read();
       if (done) break;
+      // 先接到 buf 後面
       buf += dec.decode(value, {stream: true});
       let i;
+      // 看到換行，就切出完整的一行交給 onLine
       while ((i = buf.indexOf('\n')) >= 0) {
         const s = buf.slice(0, i).trim();
         buf = buf.slice(i + 1);
@@ -539,6 +611,7 @@ async function readLoop() {
 let demoTimer = null;
 function startDemo() {
   const adcOn = {};
+  // 收到指令後等 60 毫秒再回話，模擬真實板子
   demo = (cmd) => {
     setTimeout(() => {
       let m;
@@ -560,6 +633,7 @@ function startDemo() {
   setStatus(true, '● 模擬模式（沒接板子）');
 }
 
+// 全部腳位和畫面回到初始狀態
 function resetAll() {
   if (!send('RESET')) return;
   for (const k in pins) {
@@ -574,6 +648,7 @@ function resetAll() {
 }
 
 // ---------- 小工具 ----------
+// 寫進通訊紀錄，最多保留 200 行
 function log(s) {
   const pre = document.getElementById('log');
   pre.textContent += s + '\n';
@@ -581,15 +656,19 @@ function log(s) {
   if (lines.length > 200) pre.textContent = lines.slice(-200).join('\n');
   pre.scrollTop = pre.scrollHeight;
 }
+// 更新上方的連線狀態
 function setStatus(on, s) {
   const st = document.getElementById('status');
   st.textContent = s; st.className = on ? 'on' : 'off';
 }
+// 還沒連線就操作時，讓連接按鈕跳一下提醒
 function flash() {
   const b = document.getElementById('btnConnect');
   b.animate([{transform: 'scale(1)'}, {transform: 'scale(1.12)'}, {transform: 'scale(1)'}], {duration: 400});
 }
 
+// ---------- 啟動設定 ----------
+// 依目前的板子填入標題和說明文字
 document.title = B.name + ' 網頁控制台';
 document.getElementById('title').textContent = B.name.toUpperCase() + ' 網頁控制台';
 document.getElementById(boardId === 'esp32' ? 'tabEsp32' : 'tabMega').className = 'act';
@@ -600,6 +679,7 @@ document.getElementById('cmd').placeholder = `自己打指令，例如 D${B.ledP
 svg.setAttribute('viewBox', B.viewBox);
 svg.setAttribute('aria-label', B.name);
 
+// 把 HTML 的按鈕和 JavaScript 的函式接起來
 document.getElementById('btnConnect').onclick = connect;
 document.getElementById('btnDemo').onclick = startDemo;
 document.getElementById('btnReset').onclick = resetAll;
@@ -616,6 +696,7 @@ document.getElementById('btnClearCode').onclick = () => {
 };
 document.getElementById('btnCopyCode').onclick = () => navigator.clipboard.writeText(document.getElementById('code').textContent);
 
+// 最後畫出板子
 B.draw();
 </script>
 </body>
