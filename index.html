@@ -85,6 +85,15 @@ pre{background:var(--navy);color:#e9e3c9;font-family:Consolas,monospace;font-siz
 .row input[type=text]{flex:1;font:inherit;font-family:Consolas,monospace;padding:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
 .side{display:grid;gap:16px;align-content:start}
 .note{font-size:.8rem;color:var(--muted)}
+/* 上傳戰情室 */
+.up-grid{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 8px;align-items:center;font-size:.88rem;margin:8px 0}
+.up-grid input[type=text],.up-grid select{font:inherit;padding:4px 6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);min-width:0;width:100%}
+.up-grid .chk{display:flex;gap:6px;align-items:center}
+#upThVal{font-family:Consolas,monospace;margin-left:6px}
+.multi-mode .one,.dim-mode .th{display:none}
+.up-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:4px;font-size:.78rem;font-family:Consolas,monospace;margin-top:6px}
+.up-list div{border:1px solid var(--line);padding:2px 6px;display:flex;justify-content:space-between;gap:4px}
+.up-list div.on{background:#fff3c4;border-color:var(--gold);color:#14213d}
 </style>
 </head>
 <body>
@@ -142,6 +151,24 @@ pre{background:var(--navy);color:#e9e3c9;font-family:Consolas,monospace;font-siz
       <pre id="log"></pre>
       <div class="row"><input type="text" id="cmd" placeholder="自己打指令，例如 D13=1"><button id="btnSend">送出</button></div>
       <p class="note" id="sideNote"></p>
+    </section>
+    <section>
+      <!-- 把光敏電阻的數值送到「校園能源戰情室」 -->
+      <h2>上傳到能源戰情室</h2>
+      <div class="modes" id="upModes" style="margin-top:0"><button data-m="one" class="act">一組認養一棟</button><button data-m="multi">一板 13 棟</button></div>
+      <div class="up-grid">
+        <label>名稱</label><input type="text" id="upName" maxlength="12" placeholder="組名，例如 第3組">
+        <label class="one">大樓</label><select id="upBld" class="one"></select>
+        <label>遮住時</label><select id="upDir"><option value="down">數值變小（講義接法）</option><option value="up">數值變大（光敏模組）</option></select>
+        <label>照明</label><select id="upAct"><option value="sw">開關：低於門檻全亮（D 指令）</option><option value="dim">調光補償：越暗越亮（P 指令）</option></select>
+        <label class="one th">門檻</label><div class="one th"><input type="range" id="upTh" min="0" max="1023" value="300"><span id="upThVal"></span></div>
+        <label class="one">執行</label><label class="one chk"><input type="checkbox" id="upLed" checked> 控制 <span id="upLedPin"></span> 號腳 LED</label>
+        <label>頻道</label><input type="text" id="upRoom" maxlength="24" value="class">
+      </div>
+      <div class="row"><button id="btnCal">校正亮度</button><button id="btnUp" class="primary" style="white-space:nowrap;flex:1">開始上傳</button></div>
+      <div class="hint" id="upState">先在亮處按「校正亮度」，再開始上傳</div>
+      <div id="upList" class="up-list"></div>
+      <p class="note">戰情室網址要加 <code id="upRoomUrl">?room=class</code>：<a id="upLink" href="https://stevebobobo.github.io/ksu-energy-center/?room=class" target="_blank">打開戰情室</a></p>
     </section>
   </div>
 </main>
@@ -620,9 +647,13 @@ function startDemo() {
       else if (cmd === 'AUTO=1') {
         onLine('OK ' + cmd);
         clearInterval(demoTimer);
-        demoTimer = setInterval(() => onLine('A:' + B.analogOrder.map((k, i) =>
-          B.adcCapable.has(+k.slice(1)) && !adcOn[k] ? '-' :
-          Math.round(B.adcMax * (0.45 + 0.35 * Math.sin(Date.now() / 1500 + i)))).join(',')), 300);
+        // 模擬一片雲由 A0 飄到 A12：被雲遮住的腳數值變小，約 16 秒一輪
+        demoTimer = setInterval(() => {
+          const pos = (Date.now() / 1000 % 16) * 1.2 - 3;
+          onLine('A:' + B.analogOrder.map((k, i) =>
+            B.adcCapable.has(+k.slice(1)) && !adcOn[k] ? '-' :
+            Math.round(B.adcMax * (0.72 - 0.58 * Math.exp(-((i - pos) ** 2) / 3) + 0.02 * Math.random()))).join(','));
+        }, 300);
       }
       else if (cmd === 'AUTO=0') { onLine('OK ' + cmd); clearInterval(demoTimer); }
       else onLine('OK ' + cmd);
@@ -645,6 +676,139 @@ function resetAll() {
   autoOn = false; clearInterval(demoTimer);
   for (const k in declared) delete declared[k];
   if (selected) renderPanel();
+}
+
+// ---------- 上傳到能源戰情室（MQTT） ----------
+// 戰情室訂閱 ksu-energy-center/<頻道>/#，光敏讀值發到 .../sensor/<名稱>
+// 戰情室可能連到兩個 broker 的任一個，所以兩個都送
+const UP_BROKERS = ['wss://broker.hivemq.com:8884/mqtt', 'wss://broker.emqx.io:8084/mqtt'];
+// 認養大樓（順序 = 戰情室地圖由左到右；一板 13 棟時 A0～A12 依序對應）
+const UP_BLDS = [['eng1', '工程一館'], ['eng3', '工程三館'], ['it', '資訊館'], ['yun', '雲青館'], ['slm3', '智管三館'],
+  ['slm1', '智管一館'], ['teach', '教學大樓'], ['lib', '圖資館'], ['cm2', '創媒二館'], ['rsch', '研究大樓'],
+  ['cm1', '創媒一館'], ['admin', '行政中心'], ['gym', '體育館']];
+const upOnePin = boardId === 'esp32' ? 'D34' : 'A0';      // 講義的光敏電阻接腳
+const upLedPin = boardId === 'esp32' ? 18 : 9;            // 講義的 LED 接腳
+let upMode = 'one', upClients = [], upTimer = null, upCount = 0, upLedOn = null;
+const upBase = {};                                        // 每隻腳校正時的亮度
+const $u = id => document.getElementById(id);
+
+// 需要時才載入 MQTT 程式庫
+function loadMqtt() {
+  if (window.mqtt) return Promise.resolve();
+  return new Promise((ok, fail) => {
+    const s = document.createElement('script');
+    s.src = 'vendor/mqtt.min.js'; s.onload = ok; s.onerror = fail;
+    document.head.appendChild(s);
+  });
+}
+
+// 目前要上傳的 [腳位, 大樓 id, 大樓名]
+function upTargets() {
+  if (upMode === 'one') { const b = UP_BLDS[$u('upBld').selectedIndex]; return [[upOnePin, b[0], b[1]]]; }
+  return UP_BLDS.map((b, i) => ['A' + i, b[0], b[1]]);
+}
+
+// 校正：把現在的亮度記成「天亮」，門檻設在往暗的方向 40% 的地方
+function calibrate() {
+  if (!autoOn) { if (!send('AUTO=1')) return; autoOn = true; if (selected) renderPanel(); setTimeout(calibrate, 600); return; }
+  const down = $u('upDir').value === 'down';
+  for (const [k] of upTargets()) upBase[k] = pins[k].value;
+  const v = upBase[upOnePin];
+  if (upMode === 'one' && v != null) { $u('upTh').value = Math.round(down ? v * 0.6 : v + (B.adcMax - v) * 0.4); showTh(); }
+  upState('已校正：' + upTargets().map(([k]) => `${k}=${upBase[k]}`).join(' '));
+  renderUpList();
+}
+function showTh() { $u('upThVal').textContent = $u('upTh').value; }
+
+// 算一隻腳的遮光程度 s（0 亮～1 全暗）和要不要開燈
+function judge(k) {
+  const v = pins[k].value, down = $u('upDir').value === 'down', max = B.adcMax;
+  // 看到比校正時更亮的值，就把基準往上調（校正時不小心被遮住也能自己修正）
+  if (upBase[k] != null && (down ? v > upBase[k] : v < upBase[k])) upBase[k] = v;
+  const base = upBase[k] ?? (down ? max : 0);
+  const s = down ? (base - v) / (base * 0.7 || 1) : (v - base) / ((max - base) * 0.7 || 1);
+  let th;
+  if (upMode === 'one') th = +$u('upTh').value;
+  else th = down ? base * 0.6 : base + (max - base) * 0.4;
+  return { v, s: Math.max(0, Math.min(1, +s.toFixed(2))), on: down ? v < th : v > th };
+}
+
+function renderUpList(res) {
+  $u('upList').innerHTML = upTargets().map(([k, , name], i) => {
+    const r = res ? res[i] : null;
+    return `<div class="${r && r.on ? 'on' : ''}"><span>${k} ${name}</span><b>${r ? r.v : (pins[k] ? pins[k].value : '-')}</b></div>`;
+  }).join('');
+}
+
+async function startUpload() {
+  const name = $u('upName').value.trim().replace(/[\/+#%]/g, '');   // 這幾個字元在 MQTT 主題有特殊意思
+  if (!name) { $u('upName').focus(); return; }
+  if (!writer && !demo) { log('（還沒連接板子）'); flash(); return; }
+  if (upMode === 'multi' && boardId !== 'mega') { upState('一板 13 棟要用 Mega（有 A0～A12）'); return; }
+  try { await loadMqtt(); } catch (e) { upState('MQTT 程式庫載入失敗'); return; }
+  if (!autoOn) setAuto(true);                 // 要先讓板子開始回報類比值
+  const room = ($u('upRoom').value.trim().replace(/[^\w-]/g, '') || 'class');
+  upClients = UP_BROKERS.map(url => mqtt.connect(url, {
+    clientId: 'ksu-io-' + Math.random().toString(16).slice(2, 10), connectTimeout: 8000, reconnectPeriod: 5000,
+  }));
+  const topic = `ksu-energy-center/${room}/sensor/${name}`;
+  upCount = 0; upLedOn = null;
+  // 沒校正過的腳，用開始上傳當下的亮度
+  setTimeout(() => { for (const [k] of upTargets()) if (upBase[k] == null) upBase[k] = pins[k].value; }, 700);
+  upTimer = setInterval(() => {
+    const tg = upTargets(), res = tg.map(([k]) => judge(k));
+    renderUpList(res);
+    const dim = $u('upAct').value === 'dim';
+    // 調光補償：越暗越亮，遮光程度 s 換成 PWM 0～255；過半暗才算「開燈」事件
+    if (dim) res.forEach(r => { r.pwm = Math.round(255 * r.s); r.on = r.s >= 0.5; });
+    // 執行層：讓實體 LED 跟著變
+    const p = pins['D' + upLedPin], led = upMode === 'one' && $u('upLed').checked;
+    if (led && !dim && res[0].on !== upLedOn) {
+      upLedOn = res[0].on;
+      if (send(`D${upLedPin}=${upLedOn ? 1 : 0}`) && p) { p.mode = 'out'; p.value = upLedOn ? 1 : 0; paint(p); }
+    }
+    if (led && dim && (upLedOn === null || typeof upLedOn !== 'number' || Math.abs(res[0].pwm - upLedOn) >= 8 || (res[0].pwm === 0) !== (upLedOn === 0))) {
+      upLedOn = res[0].pwm;
+      if (send(`P${upLedPin}=${upLedOn}`) && p) { p.mode = 'pwm'; p.value = upLedOn; paint(p); }
+    }
+    const on = upClients.filter(c => c.connected);
+    if (!on.length) { upState('連線中…（要能上網）'); return; }
+    const b = {};
+    tg.forEach(([, id], i) => { b[id] = { v: res[i].v, s: res[i].s, on: res[i].on ? 1 : 0, ...(dim ? { dim: 1 } : {}) }; });
+    const msg = JSON.stringify({ by: name + (demo ? '(模擬)' : ''), b });
+    on.forEach(c => c.publish(topic, msg));
+    upCount++;
+    const dark = res.filter(r => r.on).length;
+    upState(upMode === 'one'
+      ? (dim ? `已上傳 ${upCount} 次：${tg[0][2]} 光敏 ${res[0].v} → 調光 ${Math.round(res[0].s * 100)}%（P${upLedPin}=${res[0].pwm}）`
+             : `已上傳 ${upCount} 次：${tg[0][2]} 光敏 ${res[0].v}／門檻 ${$u('upTh').value} → ${res[0].on ? '天暗，開燈' : '日光充足'}`)
+      : `已上傳 ${upCount} 次：13 棟中 ${dark} 棟${dim ? '調光過半' : '天暗開燈'}`);
+  }, upMode === 'one' && $u('upAct').value === 'sw' ? 1000 : 500);
+  $u('btnUp').textContent = '停止上傳';
+  for (const id of ['upName', 'upRoom', 'upBld', 'upAct']) $u(id).disabled = true;
+  upState('連線中…');
+  code([`// 上傳戰情室：讀 ${upTargets().map(t => t[0]).join('、')}，${$u('upAct').value === 'dim' ? '越暗 LED 越亮（analogWrite）' : '低於門檻就開燈（digitalWrite）'}，送到 MQTT 主題 ${topic}`]);
+}
+function stopUpload() {
+  clearInterval(upTimer); upTimer = null;
+  upClients.forEach(c => c.end(true)); upClients = [];
+  $u('btnUp').textContent = '開始上傳';
+  for (const id of ['upName', 'upRoom', 'upBld', 'upAct']) $u(id).disabled = false;
+  upState(`已停止（共上傳 ${upCount} 次）`);
+}
+function upState(s) { $u('upState').textContent = s; }
+function setUpMode(m) {
+  if (upTimer) return;                        // 上傳中不能換模式
+  upMode = m;
+  for (const b of $u('upModes').children) b.classList.toggle('act', b.dataset.m === m);
+  $u('upModes').parentElement.classList.toggle('multi-mode', m === 'multi');
+  if (m === 'multi' && !$u('upName').value) $u('upName').value = '展示板';
+  renderUpList();
+}
+function syncRoomUrl() {
+  const r = $u('upRoom').value.trim().replace(/[^\w-]/g, '') || 'class';
+  $u('upRoomUrl').textContent = '?room=' + r;
+  $u('upLink').href = 'https://stevebobobo.github.io/ksu-energy-center/?room=' + r;
 }
 
 // ---------- 小工具 ----------
@@ -694,7 +858,19 @@ document.getElementById('btnClearCode').onclick = () => {
   pre.textContent = '// 點腳位後，這裡會出現同樣效果的程式碼'; pre.dataset.empty = '';
   for (const k in declared) delete declared[k];
 };
-document.getElementById('btnCopyCode').onclick = () => navigator.clipboard.writeText(document.getElementById('code').textContent);
+$u('upBld').innerHTML = UP_BLDS.map(([, n], i) => `<option>第${i + 1}組　${n}</option>`).join('');
+$u('upLedPin').textContent = upLedPin;
+$u('upTh').max = B.adcMax; $u('upTh').value = Math.round(B.adcMax * 0.3); showTh();
+$u('upTh').oninput = showTh;
+$u('upRoom').value = new URLSearchParams(location.search).get('room') || 'class'; syncRoomUrl();
+$u('upRoom').oninput = syncRoomUrl;
+for (const b of $u('upModes').children) b.onclick = () => setUpMode(b.dataset.m);
+$u('upBld').onchange = () => renderUpList();
+$u('btnCal').onclick = calibrate;
+$u('upAct').onchange = () => $u('upModes').parentElement.classList.toggle('dim-mode', $u('upAct').value === 'dim');
+$u('btnUp').onclick = () => upTimer ? stopUpload() : startUpload();
+if (new URLSearchParams(location.search).get('mode') === 'multi') setUpMode('multi'); else renderUpList();
+document.getElementById('btnCopyCode').onclick =() => navigator.clipboard.writeText(document.getElementById('code').textContent);
 
 // 最後畫出板子
 B.draw();
