@@ -163,10 +163,12 @@ pre{background:var(--navy);color:#e9e3c9;font-family:Consolas,monospace;font-siz
         <label>照明</label><select id="upAct"><option value="sw">開關：低於門檻全亮（D 指令）</option><option value="dim">調光補償：越暗越亮（P 指令）</option></select>
         <label class="one th">門檻</label><div class="one th"><input type="range" id="upTh" min="0" max="1023" value="300"><span id="upThVal"></span></div>
         <label class="one">執行</label><label class="one chk"><input type="checkbox" id="upLed" checked> 控制 <span id="upLedPin"></span> 號腳 LED</label>
+        <label class="one">警報</label><label class="one chk"><input type="checkbox" id="upBuz" checked> 演練時 <span id="upBuzPin"></span> 號腳蜂鳴器嗶嗶叫</label>
         <label>頻道</label><input type="text" id="upRoom" maxlength="24" value="class">
       </div>
       <div class="row"><button id="btnCal">校正亮度</button><button id="btnUp" class="primary" style="white-space:nowrap;flex:1">開始上傳</button></div>
       <div class="hint" id="upState">先在亮處按「校正亮度」，再開始上傳</div>
+      <div class="row" id="drRow" hidden><button id="btnDrPress" class="primary" style="flex:1">⚡ 模擬按下按鈕（回應卸載）</button></div>
       <div id="upList" class="up-list"></div>
       <p class="note">戰情室網址要加 <code id="upRoomUrl">?room=class</code>：<a id="upLink" href="https://stevebobobo.github.io/ksu-energy-center/?room=class" target="_blank">打開戰情室</a></p>
     </section>
@@ -524,12 +526,13 @@ function setAuto(on) {
 // ---------- 收到板子的回報 ----------
 // 處理板子回傳的一行文字，依開頭判斷意思
 function onLine(s) {
-  if (!s.startsWith('A:')) log('← ' + s);   // 類比值每 0.2 秒一次，不記，免得洗版
+  if (!s.startsWith('A:') && !(dr.blinking && (s.startsWith('OK D' + upLedPin + '=') || s.startsWith('OK P' + upBuzPin + '='))) && !(!dr.on && s === 'OK P' + upBuzPin + '=0')) log('← ' + s);   // 類比值每 0.2 秒一次、演練閃燈，不記，免得洗版
   let m;
   if ((m = /^D(\d+):([01])$/.exec(s))) {
     // D22:0：輸入腳的狀態
     const p = pins['D' + m[1]];
     if (p) { p.mode = 'in'; p.value = +m[2]; paint(p); }
+    if (+m[1] === upBtnPin && m[2] === '0') drPress();      // 演練中按下按鈕（按下是 LOW）
   } else if (s.startsWith('A:')) {
     // A:512,13,...：類比值，用逗號拆開後填到各腳
     s.slice(2).split(',').forEach((v, i) => {
@@ -688,7 +691,11 @@ const UP_BLDS = [['eng1', '工程一館'], ['eng3', '工程三館'], ['it', '資
   ['cm1', '創媒一館'], ['admin', '行政中心'], ['gym', '體育館']];
 const upOnePin = boardId === 'esp32' ? 'D34' : 'A0';      // 講義的光敏電阻接腳
 const upLedPin = boardId === 'esp32' ? 18 : 9;            // 講義的 LED 接腳
+const upBtnPin = boardId === 'esp32' ? 4 : 22;            // 講義的按鈕接腳
+const upBuzPin = boardId === 'esp32' ? 19 : 8;            // 蜂鳴器：+ 接這隻腳、− 接 GND（用 PWM 方波發聲，有源、無源都會響）
 let upMode = 'one', upClients = [], upTimer = null, upCount = 0, upLedOn = null;
+// 需量反應演練：戰情室每秒發 dr/state，收到就讓 LED 閃爍；按下按鈕回 dr/ack/<名稱>
+let dr = { on: false, id: null, t: 0, acked: false, blinking: false }, drTimer = null, drBlink = false, buzOn = false, upTopicBase = '', upNameNow = '';
 const upBase = {};                                        // 每隻腳校正時的亮度
 const $u = id => document.getElementById(id);
 
@@ -752,6 +759,14 @@ async function startUpload() {
     clientId: 'ksu-io-' + Math.random().toString(16).slice(2, 10), connectTimeout: 8000, reconnectPeriod: 5000,
   }));
   const topic = `ksu-energy-center/${room}/sensor/${name}`;
+  upTopicBase = `ksu-energy-center/${room}`; upNameNow = name;
+  upClients.forEach(c => {
+    c.on('connect', () => c.subscribe(upTopicBase + '/dr/state'));
+    c.on('message', (t, buf) => onDrState(buf.toString()));
+  });
+  if (upMode === 'one') { send('I' + upBtnPin); const bp = pins['D' + upBtnPin]; if (bp) { bp.mode = 'in'; paint(bp); } }
+  dr = { on: false, id: null, t: 0, acked: false, blinking: false };
+  clearInterval(drTimer); drTimer = setInterval(drTick, 300);
   upCount = 0; upLedOn = null;
   // 沒校正過的腳，用開始上傳當下的亮度
   setTimeout(() => { for (const [k] of upTargets()) if (upBase[k] == null) upBase[k] = pins[k].value; }, 700);
@@ -762,7 +777,7 @@ async function startUpload() {
     // 調光補償：越暗越亮，遮光程度 s 換成 PWM 0～255；過半暗才算「開燈」事件
     if (dim) res.forEach(r => { r.pwm = Math.round(255 * r.s); r.on = r.s >= 0.5; });
     // 執行層：讓實體 LED 跟著變
-    const p = pins['D' + upLedPin], led = upMode === 'one' && $u('upLed').checked;
+    const p = pins['D' + upLedPin], led = upMode === 'one' && $u('upLed').checked && !dr.on;
     if (led && !dim && res[0].on !== upLedOn) {
       upLedOn = res[0].on;
       if (send(`D${upLedPin}=${upLedOn ? 1 : 0}`) && p) { p.mode = 'out'; p.value = upLedOn ? 1 : 0; paint(p); }
@@ -779,10 +794,10 @@ async function startUpload() {
     on.forEach(c => c.publish(topic, msg));
     upCount++;
     const dark = res.filter(r => r.on).length;
-    upState(upMode === 'one'
+    upState((dr.on ? (dr.acked ? '✓ 已回應卸載，等老師結束演練｜' : '⚡ 需量反應演練：快按按鈕！｜') : '') + (upMode === 'one'
       ? (dim ? `已上傳 ${upCount} 次：${tg[0][2]} 光敏 ${res[0].v} → 調光 ${Math.round(res[0].s * 100)}%（P${upLedPin}=${res[0].pwm}）`
              : `已上傳 ${upCount} 次：${tg[0][2]} 光敏 ${res[0].v}／門檻 ${$u('upTh').value} → ${res[0].on ? '天暗，開燈' : '日光充足'}`)
-      : `已上傳 ${upCount} 次：13 棟中 ${dark} 棟${dim ? '調光過半' : '天暗開燈'}`);
+      : `已上傳 ${upCount} 次：13 棟中 ${dark} 棟${dim ? '調光過半' : '天暗開燈'}`));
   }, upMode === 'one' && $u('upAct').value === 'sw' ? 1000 : 500);
   $u('btnUp').textContent = '停止上傳';
   for (const id of ['upName', 'upRoom', 'upBld', 'upAct']) $u(id).disabled = true;
@@ -791,12 +806,69 @@ async function startUpload() {
 }
 function stopUpload() {
   clearInterval(upTimer); upTimer = null;
+  clearInterval(drTimer); drTimer = null; setBuz(false); dr = { on: false, id: null, t: 0, acked: false, blinking: false }; $u('drRow').hidden = true;
   upClients.forEach(c => c.end(true)); upClients = [];
   $u('btnUp').textContent = '開始上傳';
   for (const id of ['upName', 'upRoom', 'upBld', 'upAct']) $u(id).disabled = false;
   upState(`已停止（共上傳 ${upCount} 次）`);
 }
 function upState(s) { $u('upState').textContent = s; }
+
+// 收到戰情室的演練狀態：{"on":1,"id":"…"} 開始／進行中，{"on":0} 結束
+function onDrState(raw) {
+  let d;
+  try { d = JSON.parse(raw); } catch (e) { return; }
+  if (!d || !upTimer) return;
+  if (d.on && d.id) {
+    if (d.id !== dr.id) { dr = { on: true, id: d.id, t: 0, acked: false, blinking: false }; log('⚡ 戰情室發出需量反應演練：LED 閃爍中，按下 ' + upBtnPin + ' 號腳的按鈕回應卸載'); }
+    dr.t = Date.now();
+  } else if (!d.on && dr.on) drEnd();
+}
+function drEnd() {
+  dr.on = false; dr.blinking = false; upLedOn = null; setBuz(false);   // upLedOn = null：讓照明控制重新送一次 LED 狀態
+  $u('drRow').hidden = true;
+  log('演練結束，照明恢復自動控制');
+}
+// 蜂鳴器：P 指令送 50% 方波＝響，0＝停（不寫進通訊紀錄，免得洗版）
+function setBuz(on) {
+  if (on === buzOn) return;
+  buzOn = on;
+  const c = `P${upBuzPin}=${on ? 128 : 0}`;
+  if (demo) demo(c); else if (writer) writer.write(enc.encode(c + '\n'));
+  const p = pins['D' + upBuzPin];
+  if (p) { p.mode = 'pwm'; p.value = on ? 128 : 0; paint(p); }
+}
+function setLed(v) {
+  const p = pins['D' + upLedPin];
+  if (send(`D${upLedPin}=${v}`) && p) { p.mode = 'out'; p.value = v; paint(p); }
+}
+// 每 0.3 秒：演練中還沒按就閃燈；70 秒沒收到戰情室消息就當作結束
+// （戰情室分頁被切到背景時，Chrome 會把它的計時器壓到一分鐘一次）
+function drTick() {
+  if (!dr.on) return;
+  if (Date.now() - dr.t > 70000) { drEnd(); return; }
+  $u('drRow').hidden = !demo || dr.acked || upMode !== 'one';
+  if (dr.acked || upMode !== 'one') return;
+  dr.blinking = true; drBlink = !drBlink;
+  if ($u('upBuz').checked) setBuz(drBlink);
+  if (!$u('upLed').checked) return;
+  const p = pins['D' + upLedPin];
+  if (demo) demo(`D${upLedPin}=${drBlink ? 1 : 0}`); else if (writer) writer.write(enc.encode(`D${upLedPin}=${drBlink ? 1 : 0}
+`));
+  if (p) { p.mode = 'out'; p.value = drBlink ? 1 : 0; paint(p); }
+}
+// 按下按鈕：回報戰情室（只算第一次），LED 熄滅代表已卸載
+function drPress() {
+  if (!upTimer || !dr.on || dr.acked || upMode !== 'one') return;
+  const on = upClients.filter(c => c.connected);
+  if (!on.length) { log('（還沒連上 MQTT，回應送不出去）'); return; }
+  dr.acked = true; dr.blinking = false;
+  const msg = JSON.stringify({ by: upNameNow + (demo ? '(模擬)' : ''), id: dr.id, b: [UP_BLDS[$u('upBld').selectedIndex][0]] });
+  on.forEach(c => c.publish(`${upTopicBase}/dr/ack/${upNameNow}`, msg));
+  setLed(0); setBuz(false);
+  $u('drRow').hidden = true;
+  log('✓ 已按下按鈕，回應卸載：' + UP_BLDS[$u('upBld').selectedIndex][1] + ' 關燈、空調調高');
+}
 function setUpMode(m) {
   if (upTimer) return;                        // 上傳中不能換模式
   upMode = m;
@@ -860,6 +932,7 @@ document.getElementById('btnClearCode').onclick = () => {
 };
 $u('upBld').innerHTML = UP_BLDS.map(([, n], i) => `<option>第${i + 1}組　${n}</option>`).join('');
 $u('upLedPin').textContent = upLedPin;
+$u('upBuzPin').textContent = upBuzPin;
 $u('upTh').max = B.adcMax; $u('upTh').value = Math.round(B.adcMax * 0.3); showTh();
 $u('upTh').oninput = showTh;
 $u('upRoom').value = new URLSearchParams(location.search).get('room') || 'class'; syncRoomUrl();
@@ -869,6 +942,7 @@ $u('upBld').onchange = () => renderUpList();
 $u('btnCal').onclick = calibrate;
 $u('upAct').onchange = () => $u('upModes').parentElement.classList.toggle('dim-mode', $u('upAct').value === 'dim');
 $u('btnUp').onclick = () => upTimer ? stopUpload() : startUpload();
+$u('btnDrPress').onclick = drPress;
 if (new URLSearchParams(location.search).get('mode') === 'multi') setUpMode('multi'); else renderUpList();
 document.getElementById('btnCopyCode').onclick =() => navigator.clipboard.writeText(document.getElementById('code').textContent);
 
