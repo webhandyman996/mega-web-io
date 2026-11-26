@@ -563,6 +563,7 @@ function onLine(s) {
     if (p) { p.mode = m[1] === 'D' ? 'out' : 'pwm'; p.value = +m[3]; paint(p); }
   } else if ((m = /(MEGA-IO|ESP32-IO)/.exec(s))) {
     // 開機訊息或版本回覆：確認接的是哪塊板子
+    if (s.startsWith('READY') && gotHello && upTimer) boardRebooted();
     gotHello = true;
     if (m[1] === B.fw) setStatus(true, '● 已連線');
     else {
@@ -600,7 +601,7 @@ async function connect() {
   } catch (e) { log('沒有選 COM 埠，取消連接'); return; }
   try {
     // 鮑率要和 Arduino 程式相同
-    await port.open({baudRate: 115200});
+    await port.open({baudRate: 115200, bufferSize: 4096});   // 預設只有 255 bytes，分頁忙一下就會塞滿
   } catch (e) {
     // 最常見：同一個 COM 埠已經被別的分頁、序列埠監控視窗或其他程式打開
     log('打不開這個 COM 埠：' + e.message);
@@ -630,25 +631,35 @@ async function connect() {
 }
 
 // 持續讀板子的回話；資料可能分段送到，等到換行才處理
+// 讀取遇到可恢復的錯誤（緩衝區滿、雜訊）時，換一個 reader 繼續讀；
+// 以前遇到錯誤就整個停掉，之後按鈕、光敏都收不到，要重新整理才會好
 async function readLoop() {
   const dec = new TextDecoder();
   let buf = '';
-  try {
+  while (port && port.readable) {
     const reader = port.readable.getReader();
-    while (true) {
-      const {value, done} = await reader.read();
-      if (done) break;
-      // 先接到 buf 後面
-      buf += dec.decode(value, {stream: true});
-      let i;
-      // 看到換行，就切出完整的一行交給 onLine
-      while ((i = buf.indexOf('\n')) >= 0) {
-        const s = buf.slice(0, i).trim();
-        buf = buf.slice(i + 1);
-        if (s) onLine(s);
+    try {
+      while (true) {
+        const {value, done} = await reader.read();
+        if (done) return;
+        // 先接到 buf 後面
+        buf += dec.decode(value, {stream: true});
+        let i;
+        // 看到換行，就切出完整的一行交給 onLine
+        while ((i = buf.indexOf('\n')) >= 0) {
+          const s = buf.slice(0, i).trim();
+          buf = buf.slice(i + 1);
+          if (s) onLine(s);
+        }
       }
+    } catch (e) {
+      log('讀取中斷：' + e.message + (port && port.readable ? '，自動重新接上' : ''));
+      buf = '';
+      await sleep(200);                                   // 連續出錯時不要空轉
+    } finally {
+      try { reader.releaseLock(); } catch (e) {}
     }
-  } catch (e) { log('讀取中斷：' + e.message); }
+  }
 }
 
 // 沒有板子時的模擬：照板子上程式的方式回話
@@ -837,7 +848,7 @@ function onDrState(raw) {
   try { d = JSON.parse(raw); } catch (e) { return; }
   if (!d || !upTimer) return;
   if (d.on && d.id) {
-    if (d.id !== dr.id) { dr = { on: true, id: d.id, t: 0, acked: false, blinking: false }; log('⚡ 戰情室發出需量反應演練：LED 閃爍中，按下 ' + upBtnPin + ' 號腳的按鈕回應卸載'); }
+    if (d.id !== dr.id) { dr = { on: true, id: d.id, t: 0, acked: false, blinking: false }; buzOn = null; log('⚡ 戰情室發出需量反應演練：LED 閃爍中，按下 ' + upBtnPin + ' 號腳的按鈕回應卸載'); }
     dr.t = Date.now();
   } else if (!d.on && dr.on) drEnd();
 }
@@ -845,6 +856,13 @@ function drEnd() {
   dr.on = false; dr.blinking = false; upLedOn = null; setBuz(false);   // upLedOn = null：讓照明控制重新送一次 LED 狀態
   $u('drRow').hidden = true;
   log('演練結束，照明恢復自動控制');
+}
+// 上傳中板子自己重新開機（供電不穩、蜂鳴器突波、USB 線鬆）：板子會忘記按鈕監看和類比回報，這裡重新設定
+function boardRebooted() {
+  log('⚠ 板子剛剛自己重新開機，已重新設定按鈕與光敏回報。常重複發生：檢查 USB 線、蜂鳴器是不是直接接在腳位上');
+  buzOn = null; upLedOn = null; almLed = null;          // 板子上的實際狀態不明，下次一定重送
+  send('AUTO=1');
+  if (upMode === 'one') send('I' + upBtnPin);
 }
 // 蜂鳴器：P 指令送 50% 方波＝響，0＝停（不寫進通訊紀錄，免得洗版）
 function setBuz(on) {
@@ -914,6 +932,7 @@ function onAlarmState(raw) {
     if (alm.has(a.id) || !ALM_TASKS[a.k]) continue;
     alm.set(a.id, { id: a.id, k: a.k, t: String(a.t).slice(0, 12), lv: a.lv, task: null, done: false });
     log(`🚨 戰情室警報：${a.t}。在下方「任務分派」自己接一個任務`);
+    buzOn = null; almLed = null;                       // 新警報：蜂鳴器與 LED 指令一定重送
     changed = true;
   }
   for (const id of [...alm.keys()]) if (!ids.has(id)) { almEnd(id); changed = true; }
