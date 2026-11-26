@@ -789,14 +789,14 @@ async function startUpload() {
     c.on('connect', () => c.subscribe([upTopicBase + '/dr/state', upTopicBase + '/alarm/state']));
     c.on('message', (t, buf) => t.endsWith('/alarm/state') ? onAlarmState(buf.toString()) : onDrState(buf.toString()));
   });
-  alm = new Map(); almCur = null; clearInterval(almTimer); almTimer = setInterval(almTick, 100); renderAlm();
+  alm = new Map(); almCur = null; bgClear(almTimer); almTimer = bgInterval(almTick, 100); renderAlm();
   if (upMode === 'one') { send('I' + upBtnPin); const bp = pins['D' + upBtnPin]; if (bp) { bp.mode = 'in'; paint(bp); } }
   dr = { on: false, id: null, t: 0, acked: false, blinking: false };
-  clearInterval(drTimer); drTimer = setInterval(drTick, 300);
+  bgClear(drTimer); drTimer = bgInterval(drTick, 300);
   upCount = 0; upLedOn = null;
   // 沒校正過的腳，用開始上傳當下的亮度
   setTimeout(() => { for (const [k] of upTargets()) if (upBase[k] == null) upBase[k] = pins[k].value; }, 700);
-  upTimer = setInterval(() => {
+  upTimer = bgInterval(() => {
     const tg = upTargets(), res = tg.map(([k]) => judge(k));
     renderUpList(res);
     const dim = $u('upAct').value === 'dim';
@@ -832,9 +832,9 @@ async function startUpload() {
   code([`// 上傳戰情室：讀 ${upTargets().map(t => t[0]).join('、')}，${$u('upAct').value === 'dim' ? '越暗 LED 越亮（analogWrite）' : '低於門檻就開燈（digitalWrite）'}，送到 MQTT 主題 ${topic}`]);
 }
 function stopUpload() {
-  clearInterval(upTimer); upTimer = null;
-  clearInterval(drTimer); drTimer = null; setBuz(false); dr = { on: false, id: null, t: 0, acked: false, blinking: false }; $u('drRow').hidden = true;
-  clearInterval(almTimer); almTimer = null; alm = new Map(); almCur = null; renderAlm();
+  bgClear(upTimer); upTimer = null;
+  bgClear(drTimer); drTimer = null; setBuz(false); dr = { on: false, id: null, t: 0, acked: false, blinking: false }; $u('drRow').hidden = true;
+  bgClear(almTimer); almTimer = null; alm = new Map(); almCur = null; renderAlm();
   upClients.forEach(c => c.end(true)); upClients = [];
   $u('btnUp').textContent = '開始上傳';
   for (const id of ['upName', 'upRoom', 'upBld', 'upAct']) $u(id).disabled = false;
@@ -1050,6 +1050,20 @@ function flash() {
   const b = document.getElementById('btnConnect');
   b.animate([{transform: 'scale(1)'}, {transform: 'scale(1.12)'}, {transform: 'scale(1)'}], {duration: 400});
 }
+// 分頁在背景超過 5 分鐘，Chrome 會把一般的 setInterval 壓到一分鐘一次（演練時燈不閃、蜂鳴器不叫）；
+// Worker 裡的計時器不受影響，所以用 Worker 計時，時間到再通知頁面做事。不支援 Worker 時退回 setInterval
+function bgInterval(fn, ms) {
+  try {
+    const url = URL.createObjectURL(new Blob([`setInterval(() => postMessage(0), ${ms});`], {type: 'text/javascript'}));
+    const w = new Worker(url);
+    w.onmessage = () => fn();
+    return {stop: () => { w.terminate(); URL.revokeObjectURL(url); }};
+  } catch (e) {
+    const id = setInterval(fn, ms);
+    return {stop: () => clearInterval(id)};
+  }
+}
+function bgClear(t) { if (t) t.stop(); }
 
 // ---------- 啟動設定 ----------
 // 依目前的板子填入標題和說明文字
