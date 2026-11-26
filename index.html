@@ -94,6 +94,16 @@ pre{background:var(--navy);color:#e9e3c9;font-family:Consolas,monospace;font-siz
 .up-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:4px;font-size:.78rem;font-family:Consolas,monospace;margin-top:6px}
 .up-list div{border:1px solid var(--line);padding:2px 6px;display:flex;justify-content:space-between;gap:4px}
 .up-list div.on{background:#fff3c4;border-color:var(--gold);color:#14213d}
+.alm-box{margin-top:8px;display:grid;gap:6px}
+.alm-item{border:2px solid var(--gold);padding:6px 8px;font-size:.88rem}
+.alm-item.crit{border-color:var(--red)}
+.alm-item h3{margin:0 0 4px;font-size:1rem;display:flex;justify-content:space-between}
+.alm-item.crit h3{color:var(--red)}
+.alm-item .tasks{display:grid;gap:4px}
+.alm-item .tasks button{text-align:left}
+.alm-item .go{font-weight:700}
+.alm-item .ok{color:#2e7d32;font-weight:700}
+.alm-item progress{width:100%;height:10px}
 </style>
 </head>
 <body>
@@ -169,6 +179,7 @@ pre{background:var(--navy);color:#e9e3c9;font-family:Consolas,monospace;font-siz
       <div class="row"><button id="btnCal">校正亮度</button><button id="btnUp" class="primary" style="white-space:nowrap;flex:1">開始上傳</button></div>
       <div class="hint" id="upState">先在亮處按「校正亮度」，再開始上傳</div>
       <div class="row" id="drRow" hidden><button id="btnDrPress" class="primary" style="flex:1">⚡ 模擬按下按鈕（回應卸載）</button></div>
+      <div id="almBox" class="alm-box" hidden></div>
       <div id="upList" class="up-list"></div>
       <p class="note">戰情室網址要加 <code id="upRoomUrl">?room=class</code>：<a id="upLink" href="https://stevebobobo.github.io/ksu-energy-center/?room=class" target="_blank">打開戰情室</a></p>
     </section>
@@ -526,13 +537,16 @@ function setAuto(on) {
 // ---------- 收到板子的回報 ----------
 // 處理板子回傳的一行文字，依開頭判斷意思
 function onLine(s) {
-  if (!s.startsWith('A:') && !(dr.blinking && (s.startsWith('OK D' + upLedPin + '=') || s.startsWith('OK P' + upBuzPin + '='))) && !(!dr.on && s === 'OK P' + upBuzPin + '=0')) log('← ' + s);   // 類比值每 0.2 秒一次、演練閃燈，不記，免得洗版
+  if (!s.startsWith('A:') && !((dr.blinking || alm.size) && (s.startsWith('OK D' + upLedPin + '=') || s.startsWith('OK P' + upBuzPin + '='))) && !(!dr.on && s === 'OK P' + upBuzPin + '=0')) log('← ' + s);   // 類比值每 0.2 秒一次、演練閃燈，不記，免得洗版
   let m;
   if ((m = /^D(\d+):([01])$/.exec(s))) {
     // D22:0：輸入腳的狀態
     const p = pins['D' + m[1]];
     if (p) { p.mode = 'in'; p.value = +m[2]; paint(p); }
-    if (+m[1] === upBtnPin && m[2] === '0') drPress();      // 演練中按下按鈕（按下是 LOW）
+    if (+m[1] === upBtnPin) {
+      almBtn(+m[2]);                                         // 警報任務：記錄按下／放開的時間
+      if (m[2] === '0' && drPress()) btn.used = true;        // 演練中按下按鈕（按下是 LOW），被需量反應用掉就不算警報任務
+    }
   } else if (s.startsWith('A:')) {
     // A:512,13,...：類比值，用逗號拆開後填到各腳
     s.slice(2).split(',').forEach((v, i) => {
@@ -761,9 +775,10 @@ async function startUpload() {
   const topic = `ksu-energy-center/${room}/sensor/${name}`;
   upTopicBase = `ksu-energy-center/${room}`; upNameNow = name;
   upClients.forEach(c => {
-    c.on('connect', () => c.subscribe(upTopicBase + '/dr/state'));
-    c.on('message', (t, buf) => onDrState(buf.toString()));
+    c.on('connect', () => c.subscribe([upTopicBase + '/dr/state', upTopicBase + '/alarm/state']));
+    c.on('message', (t, buf) => t.endsWith('/alarm/state') ? onAlarmState(buf.toString()) : onDrState(buf.toString()));
   });
+  alm = new Map(); almCur = null; clearInterval(almTimer); almTimer = setInterval(almTick, 100); renderAlm();
   if (upMode === 'one') { send('I' + upBtnPin); const bp = pins['D' + upBtnPin]; if (bp) { bp.mode = 'in'; paint(bp); } }
   dr = { on: false, id: null, t: 0, acked: false, blinking: false };
   clearInterval(drTimer); drTimer = setInterval(drTick, 300);
@@ -777,7 +792,8 @@ async function startUpload() {
     // 調光補償：越暗越亮，遮光程度 s 換成 PWM 0～255；過半暗才算「開燈」事件
     if (dim) res.forEach(r => { r.pwm = Math.round(255 * r.s); r.on = r.s >= 0.5; });
     // 執行層：讓實體 LED 跟著變
-    const p = pins['D' + upLedPin], led = upMode === 'one' && $u('upLed').checked && !dr.on;
+    almDark = upMode === 'one' && res[0].on;    // 警報任務「遮住光敏 3 秒」用
+    const p = pins['D' + upLedPin], led = upMode === 'one' && $u('upLed').checked && !dr.on && !alm.size;
     if (led && !dim && res[0].on !== upLedOn) {
       upLedOn = res[0].on;
       if (send(`D${upLedPin}=${upLedOn ? 1 : 0}`) && p) { p.mode = 'out'; p.value = upLedOn ? 1 : 0; paint(p); }
@@ -807,6 +823,7 @@ async function startUpload() {
 function stopUpload() {
   clearInterval(upTimer); upTimer = null;
   clearInterval(drTimer); drTimer = null; setBuz(false); dr = { on: false, id: null, t: 0, acked: false, blinking: false }; $u('drRow').hidden = true;
+  clearInterval(almTimer); almTimer = null; alm = new Map(); almCur = null; renderAlm();
   upClients.forEach(c => c.end(true)); upClients = [];
   $u('btnUp').textContent = '開始上傳';
   for (const id of ['upName', 'upRoom', 'upBld', 'upAct']) $u(id).disabled = false;
@@ -859,15 +876,127 @@ function drTick() {
 }
 // 按下按鈕：回報戰情室（只算第一次），LED 熄滅代表已卸載
 function drPress() {
-  if (!upTimer || !dr.on || dr.acked || upMode !== 'one') return;
+  if (!upTimer || !dr.on || dr.acked || upMode !== 'one') return false;
   const on = upClients.filter(c => c.connected);
-  if (!on.length) { log('（還沒連上 MQTT，回應送不出去）'); return; }
+  if (!on.length) { log('（還沒連上 MQTT，回應送不出去）'); return false; }
   dr.acked = true; dr.blinking = false;
   const msg = JSON.stringify({ by: upNameNow + (demo ? '(模擬)' : ''), id: dr.id, b: [UP_BLDS[$u('upBld').selectedIndex][0]] });
   on.forEach(c => c.publish(`${upTopicBase}/dr/ack/${upNameNow}`, msg));
   setLed(0); setBuz(false);
   $u('drRow').hidden = true;
   log('✓ 已按下按鈕，回應卸載：' + UP_BLDS[$u('upBld').selectedIndex][1] + ' 關燈、空調調高');
+  return true;
+}
+
+// ---------- 警報應變：戰情室每秒發 alarm/state，學生在這裡自己接任務，再用 Arduino 完成對應動作 ----------
+// 任務：[代號, 名稱, 動作, 完成後 LED（1 = 恆亮代表啟動、0 = 熄滅代表卸載）]
+const ALM_TASKS = {
+  trip:    [['standby', '啟動備援主機 CH-2', 'hold', 1], ['shed', '關閉本棟非必要空調', 'press', 0]],
+  outage:  [['shed', '卸載非必要負載', 'press', 0], ['ess', '確認儲能接手供電', 'hold', 1]],
+  offline: [['manual', '現場人工量測（光敏代班）', 'shade', 1], ['reboot', '重新啟動感測節點', 'hold', 1]],
+  cloud:   [['ess', '儲能放電補位', 'press', 1], ['confirm', '回報本棟雲遮程度', 'shade', 1]],
+  heat:    [['setpoint', '空調溫度調高 1°C', 'press', 0], ['precool', '提前預冷', 'hold', 1]],
+  event:   [['light', '關閉走廊照明', 'press', 0], ['shift', '錯開空調啟動', 'hold', 1]],
+};
+const ACT_TEXT = { press: '按一下按鈕', hold: '按住按鈕 3 秒', shade: '遮住光敏電阻 3 秒' };
+const HOLD_MS = 3000, BOUNCE_MS = 50;
+let alm = new Map(), almCur = null, almTimer = null, almLast = 0, almDark = false, almTicks = 0, almLed = null;
+let btn = { s: 1, t: 0, used: false }, darkSince = 0;    // 按鈕狀態（韌體沒有防彈跳，這裡用時間過濾）
+
+function onAlarmState(raw) {
+  let d;
+  try { d = JSON.parse(raw); } catch (e) { return; }
+  if (!d || !Array.isArray(d.list) || !upTimer) return;
+  almLast = Date.now();
+  const ids = new Set(d.list.map(a => a.id));
+  let changed = false;
+  for (const a of d.list) {
+    if (alm.has(a.id) || !ALM_TASKS[a.k]) continue;
+    alm.set(a.id, { id: a.id, k: a.k, t: String(a.t).slice(0, 12), lv: a.lv, task: null, done: false });
+    log(`🚨 戰情室警報：${a.t}。在下方「任務分派」自己接一個任務`);
+    changed = true;
+  }
+  for (const id of [...alm.keys()]) if (!ids.has(id)) { almEnd(id); changed = true; }
+  if (changed) renderAlm();
+}
+function almEnd(id) {
+  const a = alm.get(id);
+  alm.delete(id);
+  if (almCur && almCur.id === id) almCur = null;
+  if (a) log(`警報結束：${a.t}`);
+  if (!alm.size) { setBuz(false); almLed = null; upLedOn = null; }   // upLedOn = null：照明控制重新接手 LED
+}
+function almPublish(a, step) {
+  const msg = JSON.stringify({ by: upNameNow + (demo ? '(模擬)' : ''), id: a.id, k: a.k, task: a.task[0], label: a.task[1], step });
+  upClients.filter(c => c.connected).forEach(c => c.publish(`${upTopicBase}/alarm/task/${upNameNow}`, msg));
+}
+// 自己分派：接下某個警報的某個任務（一次只能做一個）
+function almAccept(id, i) {
+  const a = alm.get(id);
+  if (!a || a.task || (almCur && !alm.get(almCur.id)?.done)) return;
+  if (upMode !== 'one') { log('（警報任務要用「一組認養一棟」模式）'); return; }
+  a.task = ALM_TASKS[a.k][i];
+  almCur = { id };
+  btn.used = btn.s === 0;               // 接任務時已經按著的不算
+  darkSince = 0;
+  almPublish(a, 'accept');
+  log(`🛠 接下任務：${a.t} → ${a.task[1]}（${ACT_TEXT[a.task[2]]}）`);
+  renderAlm();
+}
+function almDone() {
+  const a = almCur && alm.get(almCur.id);
+  if (!a || a.done) return;
+  a.done = true;
+  almPublish(a, 'done');
+  log(`✓ 任務完成：${a.task[1]}，已回報戰情室`);
+  renderAlm();
+}
+function almBtn(s) {
+  if (s === btn.s) return;
+  btn.s = s; btn.t = Date.now();
+  if (s === 1) btn.used = false;
+}
+// 每 0.1 秒：判斷 Arduino 動作有沒有完成，並控制 LED／蜂鳴器
+function almTick() {
+  if (!alm.size) return;
+  if (Date.now() - almLast > 70000) { for (const id of [...alm.keys()]) almEnd(id); renderAlm(); return; }   // 戰情室關掉或斷線
+  almTicks++;
+  const a = almCur && alm.get(almCur.id), now = Date.now();
+  if (a && !a.done) {
+    const held = btn.s === 0 && now - btn.t >= BOUNCE_MS && !btn.used;
+    const act = a.task[2];
+    let prog = 0;
+    if (act === 'press' && held) { btn.used = true; almDone(); }
+    else if (act === 'hold') { prog = held ? (now - btn.t) / HOLD_MS : 0; if (prog >= 1) { btn.used = true; almDone(); } }
+    else if (act === 'shade') { darkSince = almDark ? darkSince || now : 0; prog = darkSince ? (now - darkSince) / HOLD_MS : 0; if (prog >= 1) almDone(); }
+    const bar = document.getElementById('almProg');
+    if (bar) bar.value = Math.min(1, prog);
+  }
+  if (dr.on && !dr.acked) return;                       // 需量反應演練優先使用 LED 與蜂鳴器
+  // LED：有警報沒人接 → 快閃；任務執行中 → 慢閃；完成 → 依任務恆亮或熄滅
+  const waiting = [...alm.values()].some(x => !x.task) && !(a && !a.done);
+  const want = a && a.done ? a.task[3] : waiting ? (almTicks % 6 < 3 ? 1 : 0) : a ? (almTicks % 20 < 10 ? 1 : 0) : 0;
+  if ($u('upLed').checked && want !== almLed) {
+    almLed = want;
+    // 直接寫序列埠、不寫通訊紀錄（閃燈每 0.3 秒一次，免得洗版）
+    const c = `D${upLedPin}=${want}`, p = pins['D' + upLedPin];
+    if (demo) demo(c); else if (writer) writer.write(enc.encode(c + '\n'));
+    if (p) { p.mode = 'out'; p.value = want; paint(p); }
+  }
+  setBuz($u('upBuz').checked && waiting && [...alm.values()].some(x => !x.task && x.lv === 'crit') && almTicks % 6 < 3);
+}
+function renderAlm() {
+  const box = $u('almBox');
+  box.hidden = !alm.size;
+  const busy = almCur && alm.get(almCur.id) && !alm.get(almCur.id).done;
+  box.innerHTML = alm.size ? '<b>任務分派</b>' + [...alm.values()].map(a => `
+    <div class="alm-item ${a.lv}"><h3><span>${a.lv === 'crit' ? '🚨' : '⚠'} ${a.t}</span></h3>${
+      !a.task ? `<div class="tasks">${ALM_TASKS[a.k].map((t, i) => `<button data-id="${a.id}" data-i="${i}" ${busy ? 'disabled' : ''}>接下：${t[1]}　<small>${ACT_TEXT[t[2]]}</small></button>`).join('')}</div>`
+      : !a.done ? `<div class="go">任務：${a.task[1]}<br>👉 ${ACT_TEXT[a.task[2]].replace('按鈕', ' ' + upBtnPin + ' 號腳按鈕')}</div>${a.task[2] !== 'press' ? '<progress id="almProg" max="1" value="0"></progress>' : ''}${demo ? '<button data-sim="1">模擬完成動作</button>' : ''}`
+      : `<div class="ok">✓ 已完成：${a.task[1]}（LED ${a.task[3] ? '恆亮＝已啟動' : '熄滅＝已卸載'}）</div>`
+    }</div>`).join('') : '';
+  for (const b of box.querySelectorAll('button[data-id]')) b.onclick = () => almAccept(b.dataset.id, +b.dataset.i);
+  for (const b of box.querySelectorAll('button[data-sim]')) b.onclick = almDone;
 }
 function setUpMode(m) {
   if (upTimer) return;                        // 上傳中不能換模式
