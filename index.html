@@ -111,14 +111,14 @@ pre{background:var(--navy);color:#e9e3c9;font-family:Consolas,monospace;font-siz
 <header>
   <div>
     <h1 id="title">網頁控制台</h1>
-    <div class="sub">點板子上的腳位，直接控制你的開發板</div>
+    <div class="sub" data-en="Click a pin on the board to control your board directly">點板子上的腳位，直接控制你的開發板</div>
   </div>
   <nav class="tabs"><a href="?board=mega" id="tabMega">Mega 2560</a><a href="?board=esp32" id="tabEsp32">ESP32</a></nav>
   <div class="bar">
-    <span id="status" class="off">● 未連線</span>
+    <span id="status" class="off" data-en="● Not connected">● 未連線</span>
     <button id="btnConnect" class="primary">連接板子</button>
-    <button id="btnDemo">沒有板子，先試看看</button>
-    <button id="btnReset" disabled>全部重設</button>
+    <button id="btnDemo" data-en="No board? Try the demo">沒有板子，先試看看</button>
+    <button id="btnReset" disabled data-en="Reset all">全部重設</button>
   </div>
 </header>
 
@@ -127,61 +127,61 @@ pre{background:var(--navy);color:#e9e3c9;font-family:Consolas,monospace;font-siz
   <div style="display:grid;gap:16px">
     <section>
       <!-- 板子圖：svg 先留空，由 JavaScript 畫進去 -->
-      <h2>板子</h2>
+      <h2 data-en="Board">板子</h2>
       <div class="boardwrap"><svg id="board"></svg></div>
       <div class="legend">
-        <span><i style="background:var(--high)"></i>輸出 HIGH</span>
-        <span><i style="background:var(--low)"></i>輸出 LOW／未使用</span>
+        <span><i style="background:var(--high)"></i><span data-en="Output HIGH">輸出 HIGH</span></span>
+        <span><i style="background:var(--low)"></i><span data-en="Output LOW / unused">輸出 LOW／未使用</span></span>
         <span><i style="background:var(--pwm)"></i>PWM</span>
-        <span><i style="background:var(--in)"></i>輸入 HIGH</span>
-        <span><i style="background:#0b3b66"></i>輸入 LOW</span>
+        <span><i style="background:var(--in)"></i><span data-en="Input HIGH">輸入 HIGH</span></span>
+        <span><i style="background:#0b3b66"></i><span data-en="Input LOW">輸入 LOW</span></span>
         <span id="legendNote"></span>
       </div>
     </section>
     <section>
       <!-- 操作腳位時，自動產生的 Arduino 程式 -->
-      <h2>對應的 Arduino 程式</h2>
-      <pre id="code">// 點腳位後，這裡會出現同樣效果的程式碼</pre>
-      <div class="row"><button id="btnClearCode">清除</button><button id="btnCopyCode">複製</button></div>
+      <h2 data-en="Matching Arduino code">對應的 Arduino 程式</h2>
+      <pre id="code" data-en="// Click a pin and the matching code appears here">// 點腳位後，這裡會出現同樣效果的程式碼</pre>
+      <div class="row"><button id="btnClearCode" data-en="Clear">清除</button><button id="btnCopyCode" data-en="Copy">複製</button></div>
     </section>
   </div>
 
   <div class="side">
     <!-- 目前選取的腳位：內容由 JavaScript 依狀態填入 -->
     <section id="panel">
-      <h2>腳位</h2>
+      <h2 data-en="Pin">腳位</h2>
       <div class="name" id="pName">—</div>
-      <div class="hint" id="pHint">點板子上的腳位開始</div>
+      <div class="hint" id="pHint" data-en="Click a pin on the board to start">點板子上的腳位開始</div>
       <div class="modes" id="pModes"></div>
       <div id="pBody"></div>
     </section>
     <section>
       <!-- 通訊紀錄，也可以自己打指令 -->
-      <h2>通訊紀錄</h2>
+      <h2 data-en="Serial log">通訊紀錄</h2>
       <pre id="log"></pre>
-      <div class="row"><input type="text" id="cmd" placeholder="自己打指令，例如 D13=1"><button id="btnSend">送出</button></div>
+      <div class="row"><input type="text" id="cmd" placeholder="自己打指令，例如 D13=1"><button id="btnSend" data-en="Send">送出</button></div>
       <p class="note" id="sideNote"></p>
     </section>
     <section>
       <!-- 把光敏電阻的數值送到「校園能源戰情室」 -->
-      <h2>上傳到能源戰情室</h2>
-      <div class="modes" id="upModes" style="margin-top:0"><button data-m="one" class="act">一組認養一棟</button><button data-m="multi">一板 13 棟</button></div>
+      <h2 data-en="Upload to the Energy Center">上傳到能源戰情室</h2>
+      <div class="modes" id="upModes" style="margin-top:0"><button data-m="one" class="act" data-en="One team, one building">一組認養一棟</button><button data-m="multi" data-en="One board, 13 buildings">一板 13 棟</button></div>
       <div class="up-grid">
-        <label>名稱</label><input type="text" id="upName" maxlength="12" placeholder="組名，例如 第3組">
-        <label class="one">大樓</label><select id="upBld" class="one"></select>
-        <label>遮住時</label><select id="upDir"><option value="down">數值變小（講義接法）</option><option value="up">數值變大（光敏模組）</option></select>
-        <label>照明</label><select id="upAct"><option value="sw">開關：低於門檻全亮（D 指令）</option><option value="dim">調光補償：越暗越亮（P 指令）</option></select>
-        <label class="one th">門檻</label><div class="one th"><input type="range" id="upTh" min="0" max="1023" value="300"><span id="upThVal"></span></div>
-        <label class="one">執行</label><label class="one chk"><input type="checkbox" id="upLed" checked> 控制 <span id="upLedPin"></span> 號腳 LED</label>
-        <label class="one">警報</label><label class="one chk"><input type="checkbox" id="upBuz" checked> 演練時 <span id="upBuzPin"></span> 號腳蜂鳴器嗶嗶叫</label>
-        <label>頻道</label><input type="text" id="upRoom" maxlength="24" value="class">
+        <label data-en="Name">名稱</label><input type="text" id="upName" maxlength="12" placeholder="組名，例如 第3組" data-en-ph="Team name, e.g. Team3">
+        <label class="one" data-en="Building">大樓</label><select id="upBld" class="one"></select>
+        <label data-en="When covered">遮住時</label><select id="upDir"><option value="down" data-en="Value drops (handout wiring)">數值變小（講義接法）</option><option value="up" data-en="Value rises (sensor module)">數值變大（光敏模組）</option></select>
+        <label data-en="Lighting">照明</label><select id="upAct"><option value="sw" data-en="Switch: full on below threshold (D command)">開關：低於門檻全亮（D 指令）</option><option value="dim" data-en="Dimming: darker room, brighter LED (P command)">調光補償：越暗越亮（P 指令）</option></select>
+        <label class="one th" data-en="Threshold">門檻</label><div class="one th"><input type="range" id="upTh" min="0" max="1023" value="300"><span id="upThVal"></span></div>
+        <label class="one" data-en="Action">執行</label><label class="one chk"><input type="checkbox" id="upLed" checked> <span data-en='Drive the LED on pin <span id="upLedPin"></span>'>控制 <span id="upLedPin"></span> 號腳 LED</span></label>
+        <label class="one" data-en="Alarm">警報</label><label class="one chk"><input type="checkbox" id="upBuz" checked> <span data-en='Beep the buzzer on pin <span id="upBuzPin"></span> during drills'>演練時 <span id="upBuzPin"></span> 號腳蜂鳴器嗶嗶叫</span></label>
+        <label data-en="Channel">頻道</label><input type="text" id="upRoom" maxlength="24" value="class">
       </div>
-      <div class="row"><button id="btnCal">校正亮度</button><button id="btnUp" class="primary" style="white-space:nowrap;flex:1">開始上傳</button></div>
-      <div class="hint" id="upState">先在亮處按「校正亮度」，再開始上傳</div>
-      <div class="row" id="drRow" hidden><button id="btnDrPress" class="primary" style="flex:1">⚡ 模擬按下按鈕（回應卸載）</button></div>
+      <div class="row"><button id="btnCal" data-en="Calibrate">校正亮度</button><button id="btnUp" class="primary" style="white-space:nowrap;flex:1" data-en="Start upload">開始上傳</button></div>
+      <div class="hint" id="upState" data-en="In a bright spot, press &quot;Calibrate&quot;, then start uploading">先在亮處按「校正亮度」，再開始上傳</div>
+      <div class="row" id="drRow" hidden><button id="btnDrPress" class="primary" style="flex:1" data-en="⚡ Simulate a button press (shed load)">⚡ 模擬按下按鈕（回應卸載）</button></div>
       <div id="almBox" class="alm-box" hidden></div>
       <div id="upList" class="up-list"></div>
-      <p class="note">戰情室網址要加 <code id="upRoomUrl">?room=class</code>：<a id="upLink" href="https://stevebobobo.github.io/ksu-energy-center/?room=class" target="_blank">打開戰情室</a></p>
+      <p class="note"><span data-en="The Energy Center URL needs">戰情室網址要加</span> <code id="upRoomUrl">?room=class</code><span data-en=": ">：</span><a id="upLink" href="https://stevebobobo.github.io/ksu-energy-center/?room=class" target="_blank" data-en="Open the Energy Center">打開戰情室</a></p>
     </section>
   </div>
 </main>
@@ -189,6 +189,11 @@ pre{background:var(--navy);color:#e9e3c9;font-family:Consolas,monospace;font-siz
 <script>
 // JavaScript 依序分成：板子設定、畫板子、更新畫面、送指令與產生程式、
 // 收板子回報、序列埠、模擬模式、小工具、啟動設定
+
+// ---------- 語言 ----------
+// 英文版：網址加 ?lang=en（給外籍生、國外來賓）。送到戰情室的任務名稱維持中文，戰情室才對得上
+const LANG_EN = new URLSearchParams(location.search).get('lang') === 'en';
+const T = (zh, en) => LANG_EN ? en : zh;
 
 // ---------- 兩種板子的差別都寫在這裡 ----------
 const BOARDS = {
@@ -203,8 +208,8 @@ const BOARDS = {
     adcMax: 1023, vref: 5,
     ledPin: 13, ledOn: '#ffd23f', ledOff: '#5a4a1a',
     analogName: p => p.key,
-    note: '~ 可 PWM　灰色 0、1 是 USB 通訊用',
-    sideNote: '需要 Chrome 或 Edge。Arduino IDE 的序列埠監控視窗要先關掉。',
+    note: T('~ 可 PWM　灰色 0、1 是 USB 通訊用', '~ = PWM   grey 0, 1 = USB serial'),
+    sideNote: T('需要 Chrome 或 Edge。Arduino IDE 的序列埠監控視窗要先關掉。', 'Needs Chrome or Edge. Close the Arduino IDE Serial Monitor first.'),
     draw: drawMega,
   },
   esp32: {
@@ -219,8 +224,8 @@ const BOARDS = {
     ledPin: 2, ledOn: '#4aa3ff', ledOff: '#1a2a4a',
     analogName: p => String(p.num),
     labels: {36: 'VP 36', 39: 'VN 39', 16: 'RX2 16', 17: 'TX2 17'},
-    note: '輸出腳都能 PWM　34、35、VP、VN 只能輸入（類比）　灰色：TX0、RX0 是 USB 通訊用，IO0 是開機按鈕，SD0~SD3、CMD、CLK 接記憶體',
-    sideNote: '需要 Chrome 或 Edge。ESP32 腳位是 3.3V，不要接 5V。',
+    note: T('輸出腳都能 PWM　34、35、VP、VN 只能輸入（類比）　灰色：TX0、RX0 是 USB 通訊用，IO0 是開機按鈕，SD0~SD3、CMD、CLK 接記憶體', 'All output pins can PWM   34, 35, VP, VN are input only (analog)   grey: TX0, RX0 = USB serial, IO0 = boot button, SD0~SD3, CMD, CLK = flash memory'),
+    sideNote: T('需要 Chrome 或 Edge。ESP32 腳位是 3.3V，不要接 5V。', 'Needs Chrome or Edge. ESP32 pins are 3.3 V, do not connect 5 V.'),
     draw: drawEsp32,
   },
 };
@@ -366,7 +371,7 @@ function addPin(x, y, name, labelPos) {
   // 點下去就執行 onPinClick
   g.addEventListener('click', () => onPinClick(p));
   const t = el('title', {}, g);
-  t.textContent = analog ? label + '（類比輸入）' : label + ' 號腳' + (B.pwm.has(name) ? '（可 PWM）' : '');
+  t.textContent = analog ? label + T('（類比輸入）', ' (analog input)') : T(label + ' 號腳', 'Pin ' + label) + (B.pwm.has(name) ? T('（可 PWM）', ' (PWM)') : '');
 }
 
 // ---------- 畫面更新 ----------
@@ -414,7 +419,7 @@ function analogView(body) {
     <div class="hint">${(p.value * B.vref / B.adcMax).toFixed(2)} V</div>`;
   if (!autoOn) {
     const b = document.createElement('button');
-    b.textContent = '開始讀取類比值';
+    b.textContent = T('開始讀取類比值', 'Start reading analog values');
     b.className = 'primary';
     b.onclick = () => setAuto(true);
     body.appendChild(b);
@@ -429,20 +434,20 @@ function renderPanel() {
   const modes = document.getElementById('pModes');
   const body = document.getElementById('pBody');
   modes.innerHTML = ''; body.innerHTML = '';
-  const range = `讀到 0～${B.adcMax}（0V～${B.vref}V）`;
+  const range = T(`讀到 0～${B.adcMax}（0V～${B.vref}V）`, `reads 0–${B.adcMax} (0–${B.vref} V)`);
   if (p.analog) {
     name.textContent = p.label;
-    hint.textContent = '類比輸入，' + range;
+    hint.textContent = T('類比輸入，', 'Analog input, ') + range;
     analogView(body);
     return;
   }
-  name.textContent = (B.markPwm && B.pwm.has(p.num) ? '~' : '') + p.num + ' 號腳';
-  hint.textContent = B.pwm.has(p.num) ? '數位腳，可以 PWM' : '數位腳';
+  name.textContent = T((B.markPwm && B.pwm.has(p.num) ? '~' : '') + p.num + ' 號腳', 'Pin ' + (B.markPwm && B.pwm.has(p.num) ? '~' : '') + p.num);
+  hint.textContent = B.pwm.has(p.num) ? T('數位腳，可以 PWM', 'Digital pin, PWM capable') : T('數位腳', 'Digital pin');
   // 列出這隻腳可以選的用法
-  const list = [['out', '輸出']];
+  const list = [['out', T('輸出', 'Output')]];
   if (B.pwm.has(p.num)) list.push(['pwm', 'PWM']);
-  list.push(['in', '輸入']);
-  if (B.adcCapable.has(p.num)) list.push(['adc', '類比']);
+  list.push(['in', T('輸入', 'Input')]);
+  if (B.adcCapable.has(p.num)) list.push(['adc', T('類比', 'Analog')]);
   for (const [m, label] of list) {
     const b = document.createElement('button');
     b.textContent = label;
@@ -459,25 +464,25 @@ function renderPanel() {
   if (p.mode === 'out') {
     body.innerHTML = `<div class="big-val">${p.value ? 'HIGH' : 'LOW'}</div>`;
     const b = document.createElement('button');
-    b.textContent = p.value ? '改成 LOW' : '改成 HIGH';
+    b.textContent = p.value ? T('改成 LOW', 'Set LOW') : T('改成 HIGH', 'Set HIGH');
     b.className = 'primary';
     b.onclick = () => setOut(p, p.value ? 0 : 1);
     body.appendChild(b);
   } else if (p.mode === 'pwm') {
     body.innerHTML = `<div class="big-val" id="pwmVal">${p.value}</div>
       <input type="range" min="0" max="255" value="${p.value}" id="pwmRange">
-      <div class="hint">約 ${(p.value / 255 * 100).toFixed(0)}% 的時間是 HIGH</div>`;
+      <div class="hint">${T(`約 ${(p.value / 255 * 100).toFixed(0)}% 的時間是 HIGH`, `HIGH about ${(p.value / 255 * 100).toFixed(0)}% of the time`)}</div>`;
     const r = document.getElementById('pwmRange');
     r.oninput = () => document.getElementById('pwmVal').textContent = r.value;
     r.onchange = () => setPwm(p, +r.value);
   } else if (p.mode === 'in') {
     body.innerHTML = `<div class="big-val">${p.value ? 'HIGH' : 'LOW'}</div>
-      <div class="hint">已開內建上拉：沒接東西是 HIGH，接到 GND（按鈕按下）是 LOW</div>`;
+      <div class="hint">${T('已開內建上拉：沒接東西是 HIGH，接到 GND（按鈕按下）是 LOW', 'Internal pull-up on: HIGH when open, LOW when connected to GND (button pressed)')}</div>`;
   } else if (p.mode === 'adc') {
-    hint.textContent = '類比輸入，' + range;
+    hint.textContent = T('類比輸入，', 'Analog input, ') + range;
     analogView(body);
   } else {
-    body.innerHTML = '<div class="hint">選一種用法</div>';
+    body.innerHTML = `<div class="hint">${T('選一種用法', 'Pick a mode')}</div>`;
   }
 }
 
@@ -565,10 +570,10 @@ function onLine(s) {
     // 開機訊息或版本回覆：確認接的是哪塊板子
     if (s.startsWith('READY') && gotHello && upTimer) boardRebooted();
     gotHello = true;
-    if (m[1] === B.fw) setStatus(true, '● 已連線');
+    if (m[1] === B.fw) setStatus(true, T('● 已連線', '● Connected'));
     else {
       const other = m[1] === 'MEGA-IO' ? 'mega' : 'esp32';
-      setStatus(false, `● 接的是 ${BOARDS[other].name}，請切換上方的板子`);
+      setStatus(false, T(`● 接的是 ${BOARDS[other].name}，請切換上方的板子`, `● This is a ${BOARDS[other].name}, switch the board tab above`));
     }
   }
 }
@@ -582,7 +587,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // 送一行指令；有送出就回傳 true，沒連線回傳 false
 function send(cmd) {
-  if (!writer && !demo) { log('（還沒連接板子）'); flash(); return false; }
+  if (!writer && !demo) { log(T('（還沒連接板子）', '(board not connected yet)')); flash(); return false; }
   log('→ ' + cmd);
   // 結尾加換行，板子看到換行才知道這句話結束
   if (demo) demo(cmd); else writer.write(enc.encode(cmd + '\n'));
@@ -592,38 +597,38 @@ function send(cmd) {
 // 連接板子：選 COM 埠、打開序列埠、開始讀資料
 async function connect() {
   if (!('serial' in navigator)) {
-    alert('這個瀏覽器不支援 Web Serial，請用 Chrome 或 Edge 開啟。');
+    alert(T('這個瀏覽器不支援 Web Serial，請用 Chrome 或 Edge 開啟。', 'This browser does not support Web Serial. Please use Chrome or Edge.'));
     return;
   }
   try {
     // 跳出視窗讓使用者選 COM 埠
     port = await navigator.serial.requestPort();
-  } catch (e) { log('沒有選 COM 埠，取消連接'); return; }
+  } catch (e) { log(T('沒有選 COM 埠，取消連接', 'No COM port selected, cancelled')); return; }
   try {
     // 鮑率要和 Arduino 程式相同
     await port.open({baudRate: 115200, bufferSize: 4096});   // 預設只有 255 bytes，分頁忙一下就會塞滿
   } catch (e) {
     // 最常見：同一個 COM 埠已經被別的分頁、序列埠監控視窗或其他程式打開
-    log('打不開這個 COM 埠：' + e.message);
-    setStatus(false, '● COM 埠被佔用：關掉其他控制台分頁或序列埠監控視窗再試');
+    log(T('打不開這個 COM 埠：', 'Cannot open this COM port: ') + e.message);
+    setStatus(false, T('● COM 埠被佔用：關掉其他控制台分頁或序列埠監控視窗再試', '● COM port busy: close other console tabs or the Serial Monitor and retry'));
     port = null;
     return;
   }
   // 取得寫入用的 writer
   writer = port.writable.getWriter();
   demo = null; gotHello = false;
-  setStatus(true, '● 連線中，等板子重新開機…');
+  setStatus(true, T('● 連線中，等板子重新開機…', '● Connecting, waiting for the board to restart…'));
   document.getElementById('btnReset').disabled = false;
   // 開始持續讀板子的回話
   readLoop();
-  port.addEventListener('disconnect', () => { writer = null; port = null; setStatus(false, '● 已中斷'); });
+  port.addEventListener('disconnect', () => { writer = null; port = null; setStatus(false, T('● 已中斷', '● Disconnected')); });
   if (boardId === 'esp32') {
     // 像 Arduino IDE 上傳完一樣，用 RTS 讓 ESP32 重新開機（DTR 保持放開，才不會進燒錄模式）
     try {
       await port.setSignals({dataTerminalReady: false, requestToSend: true});
       await sleep(120);
       await port.setSignals({requestToSend: false});
-    } catch (e) { log('無法自動重開機，請按板子上的 EN'); }
+    } catch (e) { log(T('無法自動重開機，請按板子上的 EN', 'Cannot auto-restart, press EN on the board')); }
   }
   // 等開機訊息；沒等到就主動問一次
   for (let i = 0; i < 30 && !gotHello; i++) await sleep(100);
@@ -653,7 +658,7 @@ async function readLoop() {
         }
       }
     } catch (e) {
-      log('讀取中斷：' + e.message + (port && port.readable ? '，自動重新接上' : ''));
+      log(T('讀取中斷：', 'Read interrupted: ') + e.message + (port && port.readable ? T('，自動重新接上', ', reconnecting') : ''));
       buf = '';
       await sleep(200);                                   // 連續出錯時不要空轉
     } finally {
@@ -688,8 +693,8 @@ function startDemo() {
     }, 60);
   };
   document.getElementById('btnReset').disabled = false;
-  onLine(`READY ${B.fw} v1（模擬）`);
-  setStatus(true, '● 模擬模式（沒接板子）');
+  onLine(`READY ${B.fw} v1${T('（模擬）', ' (demo)')}`);
+  setStatus(true, T('● 模擬模式（沒接板子）', '● Demo mode (no board)'));
 }
 
 // 全部腳位和畫面回到初始狀態
@@ -711,9 +716,10 @@ function resetAll() {
 // 戰情室可能連到兩個 broker 的任一個，所以兩個都送
 const UP_BROKERS = ['wss://broker.hivemq.com:8884/mqtt', 'wss://broker.emqx.io:8084/mqtt'];
 // 認養大樓（順序 = 戰情室地圖由左到右；一板 13 棟時 A0～A12 依序對應）
-const UP_BLDS = [['eng1', '工程一館'], ['eng3', '工程三館'], ['it', '資訊館'], ['yun', '雲青館'], ['slm3', '智管三館'],
-  ['slm1', '智管一館'], ['teach', '教學大樓'], ['lib', '圖資館'], ['cm2', '創媒二館'], ['rsch', '研究大樓'],
-  ['cm1', '創媒一館'], ['admin', '行政中心'], ['gym', '體育館']];
+// 英文名稱和戰情室地圖上的簡稱一致；只用來顯示，送出的是大樓 id
+const UP_BLDS = [['eng1', T('工程一館', 'Eng 1')], ['eng3', T('工程三館', 'Eng 3')], ['it', T('資訊館', 'IT')], ['yun', T('雲青館', 'Yunqing')], ['slm3', T('智管三館', 'SLM 3')],
+  ['slm1', T('智管一館', 'SLM 1')], ['teach', T('教學大樓', 'Teaching')], ['lib', T('圖資館', 'Library')], ['cm2', T('創媒二館', 'Media 2')], ['rsch', T('研究大樓', 'Research')],
+  ['cm1', T('創媒一館', 'Media 1')], ['admin', T('行政中心', 'Admin')], ['gym', T('體育館', 'Gym')]];
 const upOnePin = boardId === 'esp32' ? 'D34' : 'A0';      // 講義的光敏電阻接腳
 const upLedPin = boardId === 'esp32' ? 18 : 9;            // 講義的 LED 接腳
 const upBtnPin = boardId === 'esp32' ? 4 : 22;            // 講義的按鈕接腳
@@ -747,7 +753,7 @@ function calibrate() {
   for (const [k] of upTargets()) upBase[k] = pins[k].value;
   const v = upBase[upOnePin];
   if (upMode === 'one' && v != null) { $u('upTh').value = Math.round(down ? v * 0.6 : v + (B.adcMax - v) * 0.4); showTh(); }
-  upState('已校正：' + upTargets().map(([k]) => `${k}=${upBase[k]}`).join(' '));
+  upState(T('已校正：', 'Calibrated: ') + upTargets().map(([k]) => `${k}=${upBase[k]}`).join(' '));
   renderUpList();
 }
 function showTh() { $u('upThVal').textContent = $u('upTh').value; }
@@ -775,9 +781,9 @@ function renderUpList(res) {
 async function startUpload() {
   const name = $u('upName').value.trim().replace(/[\/+#%]/g, '');   // 這幾個字元在 MQTT 主題有特殊意思
   if (!name) { $u('upName').focus(); return; }
-  if (!writer && !demo) { log('（還沒連接板子）'); flash(); return; }
-  if (upMode === 'multi' && boardId !== 'mega') { upState('一板 13 棟要用 Mega（有 A0～A12）'); return; }
-  try { await loadMqtt(); } catch (e) { upState('MQTT 程式庫載入失敗'); return; }
+  if (!writer && !demo) { log(T('（還沒連接板子）', '(board not connected yet)')); flash(); return; }
+  if (upMode === 'multi' && boardId !== 'mega') { upState(T('一板 13 棟要用 Mega（有 A0～A12）', '13 buildings on one board needs a Mega (A0–A12)')); return; }
+  try { await loadMqtt(); } catch (e) { upState(T('MQTT 程式庫載入失敗', 'Failed to load the MQTT library')); return; }
   if (!autoOn) setAuto(true);                 // 要先讓板子開始回報類比值
   const room = ($u('upRoom').value.trim().replace(/[^\w-]/g, '') || 'class');
   upClients = UP_BROKERS.map(url => mqtt.connect(url, {
@@ -814,31 +820,31 @@ async function startUpload() {
       if (send(`P${upLedPin}=${upLedOn}`) && p) { p.mode = 'pwm'; p.value = upLedOn; paint(p); }
     }
     const on = upClients.filter(c => c.connected);
-    if (!on.length) { upState('連線中…（要能上網）'); return; }
+    if (!on.length) { upState(T('連線中…（要能上網）', 'Connecting… (needs internet)')); return; }
     const b = {};
     tg.forEach(([, id], i) => { b[id] = { v: res[i].v, s: res[i].s, on: res[i].on ? 1 : 0, ...(dim ? { dim: 1 } : {}) }; });
-    const msg = JSON.stringify({ by: name + (demo ? '(模擬)' : ''), b });
+    const msg = JSON.stringify({ by: name + (demo ? T('(模擬)', '(demo)') : ''), b });
     on.forEach(c => c.publish(topic, msg));
     upCount++;
     const dark = res.filter(r => r.on).length;
-    upState((dr.on ? (dr.acked ? '✓ 已回應卸載，等老師結束演練｜' : '⚡ 需量反應演練：快按按鈕！｜') : '') + (upMode === 'one'
-      ? (dim ? `已上傳 ${upCount} 次：${tg[0][2]} 光敏 ${res[0].v} → 調光 ${Math.round(res[0].s * 100)}%（P${upLedPin}=${res[0].pwm}）`
-             : `已上傳 ${upCount} 次：${tg[0][2]} 光敏 ${res[0].v}／門檻 ${$u('upTh').value} → ${res[0].on ? '天暗，開燈' : '日光充足'}`)
-      : `已上傳 ${upCount} 次：13 棟中 ${dark} 棟${dim ? '調光過半' : '天暗開燈'}`));
+    upState((dr.on ? (dr.acked ? T('✓ 已回應卸載，等老師結束演練｜', '✓ Load shed, waiting for the teacher to end the drill | ') : T('⚡ 需量反應演練：快按按鈕！｜', '⚡ Demand response drill: press the button now! | ')) : '') + (upMode === 'one'
+      ? (dim ? T(`已上傳 ${upCount} 次：${tg[0][2]} 光敏 ${res[0].v} → 調光 ${Math.round(res[0].s * 100)}%（P${upLedPin}=${res[0].pwm}）`, `Uploaded ${upCount}×: ${tg[0][2]} light ${res[0].v} → dimming ${Math.round(res[0].s * 100)}% (P${upLedPin}=${res[0].pwm})`)
+             : T(`已上傳 ${upCount} 次：${tg[0][2]} 光敏 ${res[0].v}／門檻 ${$u('upTh').value} → ${res[0].on ? '天暗，開燈' : '日光充足'}`, `Uploaded ${upCount}×: ${tg[0][2]} light ${res[0].v} / threshold ${$u('upTh').value} → ${res[0].on ? 'dark, lights on' : 'enough daylight'}`))
+      : T(`已上傳 ${upCount} 次：13 棟中 ${dark} 棟${dim ? '調光過半' : '天暗開燈'}`, `Uploaded ${upCount}×: ${dark} of 13 buildings ${dim ? 'dimmed over half' : 'dark, lights on'}`)));
   }, upMode === 'one' && $u('upAct').value === 'sw' ? 1000 : 500);
-  $u('btnUp').textContent = '停止上傳';
+  $u('btnUp').textContent = T('停止上傳', 'Stop upload');
   for (const id of ['upName', 'upRoom', 'upBld', 'upAct']) $u(id).disabled = true;
-  upState('連線中…');
-  code([`// 上傳戰情室：讀 ${upTargets().map(t => t[0]).join('、')}，${$u('upAct').value === 'dim' ? '越暗 LED 越亮（analogWrite）' : '低於門檻就開燈（digitalWrite）'}，送到 MQTT 主題 ${topic}`]);
+  upState(T('連線中…', 'Connecting…'));
+  code([T(`// 上傳戰情室：讀 ${upTargets().map(t => t[0]).join('、')}，${$u('upAct').value === 'dim' ? '越暗 LED 越亮（analogWrite）' : '低於門檻就開燈（digitalWrite）'}，送到 MQTT 主題 ${topic}`, `// Upload to the Energy Center: read ${upTargets().map(t => t[0]).join(', ')}, ${$u('upAct').value === 'dim' ? 'darker = brighter LED (analogWrite)' : 'lights on below threshold (digitalWrite)'}, publish to MQTT topic ${topic}`)]);
 }
 function stopUpload() {
   bgClear(upTimer); upTimer = null;
   bgClear(drTimer); drTimer = null; setBuz(false); dr = { on: false, id: null, t: 0, acked: false, blinking: false }; $u('drRow').hidden = true;
   bgClear(almTimer); almTimer = null; alm = new Map(); almCur = null; renderAlm();
   upClients.forEach(c => c.end(true)); upClients = [];
-  $u('btnUp').textContent = '開始上傳';
+  $u('btnUp').textContent = T('開始上傳', 'Start upload');
   for (const id of ['upName', 'upRoom', 'upBld', 'upAct']) $u(id).disabled = false;
-  upState(`已停止（共上傳 ${upCount} 次）`);
+  upState(T(`已停止（共上傳 ${upCount} 次）`, `Stopped (${upCount} uploads)`));
 }
 function upState(s) { $u('upState').textContent = s; }
 
@@ -848,18 +854,18 @@ function onDrState(raw) {
   try { d = JSON.parse(raw); } catch (e) { return; }
   if (!d || !upTimer) return;
   if (d.on && d.id) {
-    if (d.id !== dr.id) { dr = { on: true, id: d.id, t: 0, acked: false, blinking: false }; buzOn = null; log('⚡ 戰情室發出需量反應演練：LED 閃爍中，按下 ' + upBtnPin + ' 號腳的按鈕回應卸載'); }
+    if (d.id !== dr.id) { dr = { on: true, id: d.id, t: 0, acked: false, blinking: false }; buzOn = null; log(T('⚡ 戰情室發出需量反應演練：LED 閃爍中，按下 ' + upBtnPin + ' 號腳的按鈕回應卸載', '⚡ Demand response drill from the Energy Center: LED blinking, press the button on pin ' + upBtnPin + ' to shed load')); }
     dr.t = Date.now();
   } else if (!d.on && dr.on) drEnd();
 }
 function drEnd() {
   dr.on = false; dr.blinking = false; upLedOn = null; setBuz(false);   // upLedOn = null：讓照明控制重新送一次 LED 狀態
   $u('drRow').hidden = true;
-  log('演練結束，照明恢復自動控制');
+  log(T('演練結束，照明恢復自動控制', 'Drill over, lighting back to automatic control'));
 }
 // 上傳中板子自己重新開機（供電不穩、蜂鳴器突波、USB 線鬆）：板子會忘記按鈕監看和類比回報，這裡重新設定
 function boardRebooted() {
-  log('⚠ 板子剛剛自己重新開機，已重新設定按鈕與光敏回報。常重複發生：檢查 USB 線、蜂鳴器是不是直接接在腳位上');
+  log(T('⚠ 板子剛剛自己重新開機，已重新設定按鈕與光敏回報。常重複發生：檢查 USB 線、蜂鳴器是不是直接接在腳位上', '⚠ The board just restarted by itself; button and light-sensor reporting are set up again. If this keeps happening, check the USB cable and whether the buzzer is wired straight to the pin'));
   buzOn = null; upLedOn = null; almLed = null;          // 板子上的實際狀態不明，下次一定重送
   send('AUTO=1');
   if (upMode === 'one') send('I' + upBtnPin);
@@ -896,27 +902,31 @@ function drTick() {
 function drPress() {
   if (!upTimer || !dr.on || dr.acked || upMode !== 'one') return false;
   const on = upClients.filter(c => c.connected);
-  if (!on.length) { log('（還沒連上 MQTT，回應送不出去）'); return false; }
+  if (!on.length) { log(T('（還沒連上 MQTT，回應送不出去）', '(MQTT not connected, response not sent)')); return false; }
   dr.acked = true; dr.blinking = false;
-  const msg = JSON.stringify({ by: upNameNow + (demo ? '(模擬)' : ''), id: dr.id, b: [UP_BLDS[$u('upBld').selectedIndex][0]] });
+  const msg = JSON.stringify({ by: upNameNow + (demo ? T('(模擬)', '(demo)') : ''), id: dr.id, b: [UP_BLDS[$u('upBld').selectedIndex][0]] });
   on.forEach(c => c.publish(`${upTopicBase}/dr/ack/${upNameNow}`, msg));
   setLed(0); setBuz(false);
   $u('drRow').hidden = true;
-  log('✓ 已按下按鈕，回應卸載：' + UP_BLDS[$u('upBld').selectedIndex][1] + ' 關燈、空調調高');
+  log(T('✓ 已按下按鈕，回應卸載：' + UP_BLDS[$u('upBld').selectedIndex][1] + ' 關燈、空調調高', '✓ Button pressed, load shed: ' + UP_BLDS[$u('upBld').selectedIndex][1] + ' lights off, AC setpoint up'));
   return true;
 }
 
 // ---------- 警報應變：戰情室每秒發 alarm/state，學生在這裡自己接任務，再用 Arduino 完成對應動作 ----------
-// 任務：[代號, 名稱, 動作, 完成後 LED（1 = 恆亮代表啟動、0 = 熄滅代表卸載）]
+// 任務：[代號, 名稱, 動作, 完成後 LED（1 = 恆亮代表啟動、0 = 熄滅代表卸載）, 英文名稱]
+// 名稱（中文）會送到戰情室，英文名稱只在 ?lang=en 時顯示
 const ALM_TASKS = {
-  trip:    [['standby', '啟動備援主機 CH-2', 'hold', 1], ['shed', '關閉本棟非必要空調', 'press', 0]],
-  outage:  [['shed', '卸載非必要負載', 'press', 0], ['ess', '確認儲能接手供電', 'hold', 1]],
-  offline: [['manual', '現場人工量測（光敏代班）', 'shade', 1], ['reboot', '重新啟動感測節點', 'hold', 1]],
-  cloud:   [['ess', '儲能放電補位', 'press', 1], ['confirm', '回報本棟雲遮程度', 'shade', 1]],
-  heat:    [['setpoint', '空調溫度調高 1°C', 'press', 0], ['precool', '提前預冷', 'hold', 1]],
-  event:   [['light', '關閉走廊照明', 'press', 0], ['shift', '錯開空調啟動', 'hold', 1]],
+  trip:    [['standby', '啟動備援主機 CH-2', 'hold', 1, 'Start backup chiller CH-2'], ['shed', '關閉本棟非必要空調', 'press', 0, 'Turn off non-essential AC']],
+  outage:  [['shed', '卸載非必要負載', 'press', 0, 'Shed non-essential loads'], ['ess', '確認儲能接手供電', 'hold', 1, 'Confirm battery storage takes over']],
+  offline: [['manual', '現場人工量測（光敏代班）', 'shade', 1, 'Manual on-site reading'], ['reboot', '重新啟動感測節點', 'hold', 1, 'Restart the sensor node']],
+  cloud:   [['ess', '儲能放電補位', 'press', 1, 'Discharge battery storage'], ['confirm', '回報本棟雲遮程度', 'shade', 1, 'Report cloud cover']],
+  heat:    [['setpoint', '空調溫度調高 1°C', 'press', 0, 'Raise AC setpoint 1 °C'], ['precool', '提前預冷', 'hold', 1, 'Pre-cool early']],
+  event:   [['light', '關閉走廊照明', 'press', 0, 'Turn off corridor lights'], ['shift', '錯開空調啟動', 'hold', 1, 'Stagger AC start-up']],
 };
-const ACT_TEXT = { press: '按一下按鈕', hold: '按住按鈕 3 秒', shade: '遮住光敏電阻 3 秒' };
+const ALM_EN = { trip: 'Chiller trip', outage: 'Grid outage', offline: 'Node offline', cloud: 'Cloud cover', heat: 'Heat wave', event: 'Large event' };
+const TN = task => LANG_EN ? task[4] : task[1];   // 任務的顯示名稱
+const ACT_TEXT = LANG_EN ? { press: 'Press the button once', hold: 'Hold the button 3 s', shade: 'Cover the light sensor 3 s' }
+                         : { press: '按一下按鈕', hold: '按住按鈕 3 秒', shade: '遮住光敏電阻 3 秒' };
 const HOLD_MS = 3000, BOUNCE_MS = 50;
 let alm = new Map(), almCur = null, almTimer = null, almLast = 0, almDark = false, almTicks = 0, almLed = null;
 let btn = { s: 1, t: 0, used: false }, darkSince = 0;    // 按鈕狀態（韌體沒有防彈跳，這裡用時間過濾）
@@ -930,8 +940,8 @@ function onAlarmState(raw) {
   let changed = false;
   for (const a of d.list) {
     if (alm.has(a.id) || !ALM_TASKS[a.k]) continue;
-    alm.set(a.id, { id: a.id, k: a.k, t: String(a.t).slice(0, 12), lv: a.lv, task: null, done: false });
-    log(`🚨 戰情室警報：${a.t}。在下方「任務分派」自己接一個任務`);
+    alm.set(a.id, { id: a.id, k: a.k, t: LANG_EN ? ALM_EN[a.k] : String(a.t).slice(0, 12), lv: a.lv, task: null, done: false });
+    log(T(`🚨 戰情室警報：${a.t}。在下方「任務分派」自己接一個任務`, `🚨 Energy Center alarm: ${ALM_EN[a.k]}. Pick a task under "Task board" below`));
     buzOn = null; almLed = null;                       // 新警報：蜂鳴器與 LED 指令一定重送
     changed = true;
   }
@@ -942,7 +952,7 @@ function almEnd(id) {
   const a = alm.get(id);
   alm.delete(id);
   if (almCur && almCur.id === id) almCur = null;
-  if (a) log(`警報結束：${a.t}`);
+  if (a) log(T(`警報結束：${a.t}`, `Alarm over: ${a.t}`));
   if (!alm.size) { setBuz(false); almLed = null; upLedOn = null; }   // upLedOn = null：照明控制重新接手 LED
 }
 function almPublish(a, step) {
@@ -953,13 +963,13 @@ function almPublish(a, step) {
 function almAccept(id, i) {
   const a = alm.get(id);
   if (!a || a.task || (almCur && !alm.get(almCur.id)?.done)) return;
-  if (upMode !== 'one') { log('（警報任務要用「一組認養一棟」模式）'); return; }
+  if (upMode !== 'one') { log(T('（警報任務要用「一組認養一棟」模式）', '(alarm tasks need "One team, one building" mode)')); return; }
   a.task = ALM_TASKS[a.k][i];
   almCur = { id };
   btn.used = btn.s === 0;               // 接任務時已經按著的不算
   darkSince = 0;
   almPublish(a, 'accept');
-  log(`🛠 接下任務：${a.t} → ${a.task[1]}（${ACT_TEXT[a.task[2]]}）`);
+  log(T(`🛠 接下任務：${a.t} → ${a.task[1]}（${ACT_TEXT[a.task[2]]}）`, `🛠 Task accepted: ${a.t} → ${TN(a.task)} (${ACT_TEXT[a.task[2]]})`));
   renderAlm();
 }
 function almDone() {
@@ -967,7 +977,7 @@ function almDone() {
   if (!a || a.done) return;
   a.done = true;
   almPublish(a, 'done');
-  log(`✓ 任務完成：${a.task[1]}，已回報戰情室`);
+  log(T(`✓ 任務完成：${a.task[1]}，已回報戰情室`, `✓ Task done: ${TN(a.task)}, reported to the Energy Center`));
   renderAlm();
 }
 function almBtn(s) {
@@ -1008,11 +1018,11 @@ function renderAlm() {
   const box = $u('almBox');
   box.hidden = !alm.size;
   const busy = almCur && alm.get(almCur.id) && !alm.get(almCur.id).done;
-  box.innerHTML = alm.size ? '<b>任務分派</b>' + [...alm.values()].map(a => `
+  box.innerHTML = alm.size ? `<b>${T('任務分派', 'Task board')}</b>` + [...alm.values()].map(a => `
     <div class="alm-item ${a.lv}"><h3><span>${a.lv === 'crit' ? '🚨' : '⚠'} ${a.t}</span></h3>${
-      !a.task ? `<div class="tasks">${ALM_TASKS[a.k].map((t, i) => `<button data-id="${a.id}" data-i="${i}" ${busy ? 'disabled' : ''}>接下：${t[1]}　<small>${ACT_TEXT[t[2]]}</small></button>`).join('')}</div>`
-      : !a.done ? `<div class="go">任務：${a.task[1]}<br>👉 ${ACT_TEXT[a.task[2]].replace('按鈕', ' ' + upBtnPin + ' 號腳按鈕')}</div>${a.task[2] !== 'press' ? '<progress id="almProg" max="1" value="0"></progress>' : ''}${demo ? '<button data-sim="1">模擬完成動作</button>' : ''}`
-      : `<div class="ok">✓ 已完成：${a.task[1]}（LED ${a.task[3] ? '恆亮＝已啟動' : '熄滅＝已卸載'}）</div>`
+      !a.task ? `<div class="tasks">${ALM_TASKS[a.k].map((t, i) => `<button data-id="${a.id}" data-i="${i}" ${busy ? 'disabled' : ''}>${T('接下：', 'Accept: ')}${TN(t)}　<small>${ACT_TEXT[t[2]]}</small></button>`).join('')}</div>`
+      : !a.done ? `<div class="go">${T('任務：', 'Task: ')}${TN(a.task)}<br>👉 ${LANG_EN ? ACT_TEXT[a.task[2]].replace('button', 'button on pin ' + upBtnPin) : ACT_TEXT[a.task[2]].replace('按鈕', ' ' + upBtnPin + ' 號腳按鈕')}</div>${a.task[2] !== 'press' ? '<progress id="almProg" max="1" value="0"></progress>' : ''}${demo ? `<button data-sim="1">${T('模擬完成動作', 'Simulate the action')}</button>` : ''}`
+      : `<div class="ok">${T('✓ 已完成：', '✓ Done: ')}${TN(a.task)}${T(`（LED ${a.task[3] ? '恆亮＝已啟動' : '熄滅＝已卸載'}）`, ` (LED ${a.task[3] ? 'steady on = started' : 'off = shed'})`)}</div>`
     }</div>`).join('') : '';
   for (const b of box.querySelectorAll('button[data-id]')) b.onclick = () => almAccept(b.dataset.id, +b.dataset.i);
   for (const b of box.querySelectorAll('button[data-sim]')) b.onclick = almDone;
@@ -1022,13 +1032,13 @@ function setUpMode(m) {
   upMode = m;
   for (const b of $u('upModes').children) b.classList.toggle('act', b.dataset.m === m);
   $u('upModes').parentElement.classList.toggle('multi-mode', m === 'multi');
-  if (m === 'multi' && !$u('upName').value) $u('upName').value = '展示板';
+  if (m === 'multi' && !$u('upName').value) $u('upName').value = T('展示板', 'Demo board');
   renderUpList();
 }
 function syncRoomUrl() {
   const r = $u('upRoom').value.trim().replace(/[^\w-]/g, '') || 'class';
-  $u('upRoomUrl').textContent = '?room=' + r;
-  $u('upLink').href = 'https://stevebobobo.github.io/ksu-energy-center/?room=' + r;
+  $u('upRoomUrl').textContent = '?room=' + r + (LANG_EN ? '&lang=en' : '');
+  $u('upLink').href = 'https://stevebobobo.github.io/ksu-energy-center/?room=' + r + (LANG_EN ? '&lang=en' : '');
 }
 
 // ---------- 小工具 ----------
@@ -1067,13 +1077,20 @@ function bgClear(t) { if (t) t.stop(); }
 
 // ---------- 啟動設定 ----------
 // 依目前的板子填入標題和說明文字
-document.title = B.name + ' 網頁控制台';
-document.getElementById('title').textContent = B.name.toUpperCase() + ' 網頁控制台';
+// 英文版：把 HTML 裡標了 data-en 的文字換掉，板子分頁的連結也保留 lang=en
+if (LANG_EN) {
+  document.documentElement.lang = 'en';
+  for (const e of document.querySelectorAll('[data-en]')) e.innerHTML = e.dataset.en;
+  for (const e of document.querySelectorAll('[data-en-ph]')) e.placeholder = e.dataset.enPh;
+  for (const id of ['tabMega', 'tabEsp32']) document.getElementById(id).href += '&lang=en';
+}
+document.title = B.name + T(' 網頁控制台', ' Web Console');
+document.getElementById('title').textContent = B.name.toUpperCase() + T(' 網頁控制台', ' WEB CONSOLE');
 document.getElementById(boardId === 'esp32' ? 'tabEsp32' : 'tabMega').className = 'act';
-document.getElementById('btnConnect').textContent = '連接 ' + B.name;
+document.getElementById('btnConnect').textContent = T('連接 ', 'Connect ') + B.name;
 document.getElementById('legendNote').textContent = B.note;
 document.getElementById('sideNote').textContent = B.sideNote;
-document.getElementById('cmd').placeholder = `自己打指令，例如 D${B.ledPin}=1`;
+document.getElementById('cmd').placeholder = T(`自己打指令，例如 D${B.ledPin}=1`, `Type a command, e.g. D${B.ledPin}=1`);
 svg.setAttribute('viewBox', B.viewBox);
 svg.setAttribute('aria-label', B.name);
 
@@ -1089,10 +1106,10 @@ document.getElementById('btnSend').onclick = () => {
 document.getElementById('cmd').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('btnSend').click(); });
 document.getElementById('btnClearCode').onclick = () => {
   const pre = document.getElementById('code');
-  pre.textContent = '// 點腳位後，這裡會出現同樣效果的程式碼'; pre.dataset.empty = '';
+  pre.textContent = T('// 點腳位後，這裡會出現同樣效果的程式碼', '// Click a pin and the matching code appears here'); pre.dataset.empty = '';
   for (const k in declared) delete declared[k];
 };
-$u('upBld').innerHTML = UP_BLDS.map(([, n], i) => `<option>第${i + 1}組　${n}</option>`).join('');
+$u('upBld').innerHTML = UP_BLDS.map(([, n], i) => `<option>${T(`第${i + 1}組　${n}`, `Team ${i + 1} · ${n}`)}</option>`).join('');
 $u('upLedPin').textContent = upLedPin;
 $u('upBuzPin').textContent = upBuzPin;
 $u('upTh').max = B.adcMax; $u('upTh').value = Math.round(B.adcMax * 0.3); showTh();
